@@ -36,9 +36,12 @@ impl App
     {
         match event::read()?
         {
-            Event::Key(key_event) if key_event.kind == KeyEventKind::Press =>
+            Event::Key(key_event) =>
             {
-                self.handle_key_event(key_event)
+                if key_event.kind == KeyEventKind::Press
+                {
+                    self.handle_key_event(key_event)
+                }
             }
             _ => { }
         };
