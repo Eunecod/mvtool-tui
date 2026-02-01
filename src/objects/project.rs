@@ -23,10 +23,10 @@ impl Project
         return &self.name;
     }
 
-    // fn get_path(&self) -> &String
-    // {
-    //     return &self.path;
-    // }
+    pub fn get_path(&self) -> &String
+    {
+        return &self.path;
+    }
 
     pub fn get_components_mut(&mut self) -> &mut Vec<Component>
     {

@@ -9,7 +9,7 @@
 mod objects;
 mod ui;
 
-use std::{io, fs};
+use std::{fs, io, path::Path};
 
 use crossterm::{event::{self, Event, KeyCode, KeyEvent, KeyEventKind}};
 use ratatui::{DefaultTerminal, Frame, buffer::{Buffer}, layout::{Constraint, Layout, Rect, Spacing}, style::{Color, Style, Stylize}, symbols::border, text::{Line, Text}, widgets::{Block, Padding, Paragraph, Widget}};
@@ -17,6 +17,7 @@ use serde_json::{Value};
 
 use objects::{Component, Project, Configure}; 
 use ui::checkbox::{Checkbox, CheckboxState, LayoutCheckboxGroup, VeticalCheckboxGroup, HorizontalCheckboxGroup};
+use ui::messagelog::{MessageLog, MessageType};
 
 fn main() -> io::Result<()>
 {
@@ -24,7 +25,7 @@ fn main() -> io::Result<()>
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub enum ActiveArea
+enum ActiveArea
 {
     #[default]
     Project, 
@@ -32,11 +33,40 @@ pub enum ActiveArea
     Component,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+enum DirectionTab
+{
+    #[default]
+    Next,
+    Prev,
+}
+
+#[derive(Debug, Default)]
+struct Setting
+{
+    path: String,
+}
+
+impl Setting
+{
+    fn new(path: String) -> Self
+    {
+        return Self { path: path };
+    }
+
+    fn get_path(&self) -> &String
+    {
+        return &self.path;
+    }
+
+}
+
 #[derive(Debug, Default)]
 pub struct App
 {
     projects: Vec<Project>,
     configures: Vec<Configure>,
+    setting: Setting,
 
     selected_project: usize,
     selected_configure: usize,
@@ -44,7 +74,7 @@ pub struct App
 
     active_area: ActiveArea,
 
-    message: String,
+    message_log: MessageLog,
 
     exit: bool,
 }
@@ -53,29 +83,46 @@ impl App
 {
     pub fn init(&mut self)
     {
-        let content = fs::read_to_string("D:/code/mvtool-tui/target/debug/setting.json").unwrap(); 
-        let json_body: Value = serde_json::from_str(&content).unwrap();
+        self.active_area = ActiveArea::Project;
+        self.selected_project   = 0;
+        self.selected_configure = 0;
+        self.selected_component = 0;
 
-        for (name, value) in json_body["projects"].as_object().unwrap()
+        self.message_log = MessageLog::default();
+
+        let content = fs::read_to_string("D:/code/mvtool-tui/target/debug/setting.json").unwrap_or(String::new()); 
+
+        let json_body: Value = serde_json::from_str(&content).unwrap_or(Value::Null);
+        if json_body.is_null()
+        {
+            self.message_log.add_message("Initialization mvtool finished error: not load json".to_string(), MessageType::Error);
+            return;
+        }
+
+        for project in json_body["projects"].as_array().unwrap()
         {
             let mut components: Vec<Component> = Vec::new();
-            for component in value["components"].as_array().unwrap()
+            for component in project["components"].as_array().unwrap()
             {
                 components.push(Component::new(component["name"].to_string(), component["selected"].as_bool().unwrap_or(false)));
             }
 
-            self.projects.push(Project::new(name.to_string(), value["path"].to_string(), components, value["selected"].as_bool().unwrap_or(false)));
+            self.projects.push(Project::new(project["name"].to_string(), project["path"].to_string(), components, project["selected"].as_bool().unwrap_or(false)));
         }
 
-        for config in json_body["configure"].as_array().unwrap()
+        for configure in json_body["configure"].as_array().unwrap()
         {
-            self.configures.push(Configure::new(config["name"].to_string(), config["selected"].as_bool().unwrap_or(false)));
+            self.configures.push(Configure::new(configure["name"].to_string(), configure["selected"].as_bool().unwrap_or(false)));
         }
 
-        self.selected_project   = 0;
-        self.selected_configure = 0;
-        self.selected_component = 0;
-        self.active_area = ActiveArea::Project;
+        self.setting = Setting::new(json_body["settings"]["path"].as_str().unwrap_or("").to_string()); 
+        if self.setting.get_path().is_empty()
+        {
+            self.message_log.add_message("Initialization mvtool finished error: setting path is empty".to_string(), MessageType::Error);
+            return;
+        }    
+
+        self.message_log.add_message("Initialization success done mvtool".to_string(), MessageType::Info);    
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()>
@@ -125,8 +172,8 @@ impl App
             KeyCode::F(1)      => self.ok(),
 
             KeyCode::Esc       => self.exit(),
-            KeyCode::Tab       => self.toggle_active_area(true),
-            KeyCode::BackTab   => self.toggle_active_area(false),
+            KeyCode::Tab       => self.toggle_active_area(DirectionTab::Next),
+            KeyCode::BackTab   => self.toggle_active_area(DirectionTab::Prev),
 
             _ => { }   
         }
@@ -139,12 +186,33 @@ impl App
 
     fn ok(&mut self)
     {
-        self.message.clear();
-        for component in self.projects[self.selected_project].get_components().iter()
+        // self.message.clear();
+
+        let destination_path: String = self.setting.get_path().replace("{PROJECT}", self.projects[self.selected_project].get_name().trim_matches('"'));
+        let destination_dir: &Path = Path::new(&destination_path);
+
+        for component in self.projects[self.selected_project].get_components()
         {
-            if component.is_selected()
+            if self.projects[self.selected_project].is_selected() && component.is_selected()
             {
-                self.message += component.get_name();
+                let component_name: String = component.get_name().trim_matches('"').to_string();
+                let source_file: std::path::PathBuf = Path::new(self.projects[self.selected_project].get_path().trim_matches('"')).join(&component_name);
+            
+                if !source_file.exists()
+                {
+                    self.message_log.add_message(format!("Not exists file copy: {}", source_file.display()), MessageType::Warning);
+                    return;
+                }
+                if !destination_dir.exists()
+                {
+                    self.message_log.add_message(format!("Not exists directory coped: {}", destination_dir.display()), MessageType::Warning);
+                    return;
+                }
+                
+                let destination_file: std::path::PathBuf = destination_dir.join(&component_name);
+
+                self.message_log.add_message(format!("Coped {} file to {}", self.projects[self.selected_project].get_components().len(), destination_dir.display()), MessageType::Success);
+                fs::copy(&source_file, &destination_file).unwrap();
             }
         }
     }
@@ -227,13 +295,13 @@ impl App
         };
     }
 
-    fn toggle_active_area(&mut self, direction: bool)
+    fn toggle_active_area(&mut self, direction: DirectionTab)
     {
         match self.active_area
         {
             ActiveArea::Project =>
             {
-                if direction
+                if direction == DirectionTab::Next
                 {
                     self.active_area = ActiveArea::Configure;
                 }
@@ -244,7 +312,7 @@ impl App
             },
             ActiveArea::Configure => 
             {
-                if direction
+                if direction == DirectionTab::Next
                 {
                     self.active_area = ActiveArea::Component;
                 }
@@ -255,7 +323,7 @@ impl App
             },
             ActiveArea::Component => 
             {
-                if direction
+                if direction == DirectionTab::Next
                 {
                     self.active_area = ActiveArea::Project;
                 }
@@ -370,7 +438,7 @@ impl Widget for &App
 
         let mut configures_vetical_checkbox_group: VeticalCheckboxGroup = VeticalCheckboxGroup::new();
         configures_vetical_checkbox_group.aligment(ratatui::layout::Alignment::Left);
-        for (index, configure) in self.configures.iter().enumerate()
+        for (index,configure) in self.configures.iter().enumerate()
         {
             let mut checkbox: Checkbox<'_> = Checkbox::new(&configure.get_name());
             let mut state: CheckboxState = CheckboxState::new(configure.is_selected()); 
@@ -392,7 +460,7 @@ impl Widget for &App
             configures_vetical_checkbox_group.add_checkbox(checkbox);
         }
 
-        // COMPONENTS LIST
+        // COMPONENTS LIST  
         let components_block: Block<'_> = Block::bordered().title(" components ".bold()).border_set(border::THICK).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 })
         .border_style(if self.active_area == ActiveArea::Component { Style::default().fg(Color::Gray) } else { Style::default().fg(Color::DarkGray) });
 
@@ -421,8 +489,8 @@ impl Widget for &App
         }
 
         // CONSOLE
-        let console_block: Block<'_> = Block::bordered().title(" console ").border_set(border::THICK).padding(Padding { left: 2, right: 0, top: 0, bottom: 0 });
-        let console_paragraph: Paragraph<'_> = Paragraph::new(Text::from(self.message.clone())).block(console_block);
+        let console_block: Block<'_> = Block::bordered().title(" console ").border_set(border::THICK).padding(Padding { left: 1, right: 0, top: 0, bottom: 0 });
+        let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
 
         // RENDER MAINLAYOUT 0
         logo_block.render(logo_area, buf);
@@ -439,6 +507,6 @@ impl Widget for &App
         configures_block.render(configures_area, buf);
 
         // RENDER MAINLAYOUT 1
-        console_paragraph.render(console_area, buf);
+        console.render(console_area, buf);
     }
 }
