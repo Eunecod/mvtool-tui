@@ -7,17 +7,18 @@
 //                            \__/          | 
 
 mod objects;
+mod utils;
 mod ui;
 
-use std::{fs, io, path::Path};
-
+use std::{fs, io, path::Path, collections::HashSet};
 use crossterm::{event::{self, Event, KeyCode, KeyEvent, KeyEventKind}};
 use ratatui::{DefaultTerminal, Frame, buffer::{Buffer}, layout::{Constraint, Layout, Rect, Spacing}, style::{Color, Style, Stylize}, symbols::border, text::{Line, Text}, widgets::{Block, Padding, Paragraph, Widget}};
 use serde_json::{Value};
 
-use objects::{Component, Project, Configure}; 
 use ui::checkbox::{Checkbox, CheckboxState, LayoutCheckboxGroup, VeticalCheckboxGroup, HorizontalCheckboxGroup};
 use ui::messagelog::{MessageLog, MessageType};
+use objects::{Component, Project, Configure}; 
+use utils::Utils;
 
 fn main() -> io::Result<()>
 {
@@ -67,6 +68,7 @@ pub struct App
     projects: Vec<Project>,
     configures: Vec<Configure>,
     setting: Setting,
+    prefix_exceptions: HashSet<String>,
 
     selected_project: usize,
     selected_configure: usize,
@@ -90,7 +92,7 @@ impl App
 
         self.message_log = MessageLog::default();
 
-        let content = fs::read_to_string("D:/code/mvtool-tui/target/debug/setting.json").unwrap_or(String::new()); 
+        let content = fs::read_to_string("setting.json").unwrap_or(String::new()); 
 
         let json_body: Value = serde_json::from_str(&content).unwrap_or(Value::Null);
         if json_body.is_null()
@@ -110,9 +112,10 @@ impl App
             self.projects.push(Project::new(project["name"].to_string(), project["path"].to_string(), components, project["selected"].as_bool().unwrap_or(false)));
         }
 
+        self.prefix_exceptions = json_body["prefix_exceptions"].as_array().unwrap_or(&vec![]).iter().filter_map(|value| value.as_str()).map(|value| value.trim_matches('"').to_string()).collect();
         for configure in json_body["configure"].as_array().unwrap()
-        {
-            self.configures.push(Configure::new(configure["name"].to_string(), configure["selected"].as_bool().unwrap_or(false)));
+        { 
+            self.configures.push(Configure::new(configure["name"].to_string(),  configure["prefix"].to_string(), configure["selected"].as_bool().unwrap_or(false)));
         }
 
         self.setting = Setting::new(json_body["settings"]["path"].as_str().unwrap_or("").to_string()); 
@@ -186,17 +189,42 @@ impl App
 
     fn ok(&mut self)
     {
-        // self.message.clear();
+        let mut current_selected_project: Option<usize> = Option::None;
+        for (index, project) in self.projects.iter().enumerate()
+        {
+            if project.is_selected()
+            {
+                current_selected_project = Some(index);
+            }
+        }
 
-        let destination_path: String = self.setting.get_path().replace("{PROJECT}", self.projects[self.selected_project].get_name().trim_matches('"'));
+        if current_selected_project.is_none()
+        {
+            self.message_log.add_message("Not selected project".to_string(), MessageType::Warning);
+            return;
+        }
+
+        let destination_path: String = self.setting.get_path().replace("{PROJECT}", self.projects[current_selected_project.unwrap_or_default()].get_name().trim_matches('"'));
         let destination_dir: &Path = Path::new(&destination_path);
 
-        for component in self.projects[self.selected_project].get_components()
+        let mut quantity_copied: u32 = 0;
+        for component in self.projects[current_selected_project.unwrap_or_default()].get_components()
         {
-            if self.projects[self.selected_project].is_selected() && component.is_selected()
+            if component.is_selected()
             {
-                let component_name: String = component.get_name().trim_matches('"').to_string();
-                let source_file: std::path::PathBuf = Path::new(self.projects[self.selected_project].get_path().trim_matches('"')).join(&component_name);
+                let mut component_name: String = component.get_name().trim_matches('"').to_string();
+                if !self.prefix_exceptions.contains(&component_name)
+                {
+                    component_name = Utils::add_prefix_before_ext(&component_name, &self.configures[self.selected_configure].get_prefix().trim_matches('"').to_string());
+                }
+
+                if component_name.is_empty()
+                {
+                    self.message_log.add_message(format!("Prefix broken name your pick component - '{}'", &component.get_name().trim_matches('"').to_string()), MessageType::Warning);
+                    return;
+                }
+
+                let source_file: std::path::PathBuf = Path::new(self.projects[current_selected_project.unwrap_or_default()].get_path().trim_matches('"')).join(&component_name);
             
                 if !source_file.exists()
                 {
@@ -211,10 +239,12 @@ impl App
                 
                 let destination_file: std::path::PathBuf = destination_dir.join(&component_name);
 
-                self.message_log.add_message(format!("Coped {} file to {}", self.projects[self.selected_project].get_components().len(), destination_dir.display()), MessageType::Success);
                 fs::copy(&source_file, &destination_file).unwrap();
+                quantity_copied += 1;
             }
         }
+
+        self.message_log.add_message(format!("Copied {} file to {}", quantity_copied, destination_dir.display()), MessageType::Success);
     }
 
     fn up(&mut self)
