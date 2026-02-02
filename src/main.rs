@@ -101,21 +101,33 @@ impl App
             return;
         }
 
-        for project in json_body["projects"].as_array().unwrap()
+        for project in json_body["projects"].as_array().unwrap_or(&vec![])
         {
             let mut components: Vec<Component> = Vec::new();
-            for component in project["components"].as_array().unwrap()
+            for component in project["components"].as_array().unwrap_or(&vec![])
             {
-                components.push(Component::new(component["name"].to_string(), component["selected"].as_bool().unwrap_or(false)));
+                let name: String = component["name"].as_str().unwrap_or("[undefined]").to_string();
+                let selected: bool = component["selected"].as_bool().unwrap_or(false);
+
+                components.push(Component::new(name, selected));  
             }
 
-            self.projects.push(Project::new(project["name"].to_string(), project["path"].to_string(), components, project["selected"].as_bool().unwrap_or(false)));
+            let name: String = project["name"].as_str().unwrap_or("[undefined]").to_string();
+            let folder: String = project["folder"].as_str().unwrap_or("[undefined]").to_string();
+            let selected: bool = project["selected"].as_bool().unwrap_or(false);
+
+            self.projects.push(Project::new(name, folder, components, selected));
         }
 
         self.prefix_exceptions = json_body["prefix_exceptions"].as_array().unwrap_or(&vec![]).iter().filter_map(|value| value.as_str()).map(|value| value.trim_matches('"').to_string()).collect();
-        for configure in json_body["configure"].as_array().unwrap()
+        for configure in json_body["configure"].as_array().unwrap_or(&vec![])
         { 
-            self.configures.push(Configure::new(configure["name"].to_string(),  configure["prefix"].to_string(), configure["selected"].as_bool().unwrap_or(false)));
+            let name: String = configure["name"].as_str().unwrap_or("[undefined]").to_string();
+            let path: String = configure["path"].as_str().unwrap_or("[undefined]").to_string();
+            let prefix: String = configure["prefix"].as_str().unwrap_or("[undefined]").to_string();
+            let selected: bool = configure["selected"].as_bool().unwrap_or(false);
+
+            self.configures.push(Configure::new(name, path, prefix, selected));
         }
 
         self.setting = Setting::new(json_body["settings"]["path"].as_str().unwrap_or("").to_string()); 
@@ -125,7 +137,7 @@ impl App
             return;
         }    
 
-        self.message_log.add_message("Initialization success done mvtool".to_string(), MessageType::Info);    
+        self.message_log.add_message("Initialization success done mvtool".to_string(), MessageType::Info);
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()>
@@ -198,13 +210,22 @@ impl App
             }
         }
 
-        if current_selected_project.is_none()
+        let mut current_selected_configure: Option<usize> = Option::None;
+        for (index, configure) in self.configures.iter().enumerate()
         {
-            self.message_log.add_message("Not selected project".to_string(), MessageType::Warning);
+            if configure.is_selected()
+            {
+                current_selected_configure = Some(index);
+            }
+        }
+
+        if current_selected_project.is_none() || current_selected_configure.is_none()
+        {
+            self.message_log.add_message("Not supported project or configure".to_string(), MessageType::Warning);
             return;
         }
 
-        let destination_path: String = self.setting.get_path().replace("{PROJECT}", self.projects[current_selected_project.unwrap_or_default()].get_name().trim_matches('"'));
+        let destination_path: String = self.setting.get_path().replace("{PROJECT}", self.projects[current_selected_project.unwrap_or_default()].get_name());
         let destination_dir: &Path = Path::new(&destination_path);
 
         let mut quantity_copied: u32 = 0;
@@ -212,20 +233,21 @@ impl App
         {
             if component.is_selected()
             {
-                let mut component_name: String = component.get_name().trim_matches('"').to_string();
+                let mut component_name: String = component.get_name().clone();
                 if !self.prefix_exceptions.contains(&component_name)
                 {
-                    component_name = Utils::add_prefix_before_ext(&component_name, &self.configures[self.selected_configure].get_prefix().trim_matches('"').to_string());
+                    component_name = Utils::add_prefix_before_ext(&component_name, self.configures[current_selected_configure.unwrap_or_default()].get_prefix());
                 }
 
                 if component_name.is_empty()
                 {
-                    self.message_log.add_message(format!("Prefix broken name your pick component - '{}'", &component.get_name().trim_matches('"').to_string()), MessageType::Warning);
+                    self.message_log.add_message(format!("Prefix broken name your pick component - '{}'", &component.get_name()), MessageType::Warning);
                     return;
                 }
 
-                let source_file: std::path::PathBuf = Path::new(self.projects[current_selected_project.unwrap_or_default()].get_path().trim_matches('"')).join(&component_name);
-            
+                let source_path: String = self.configures[current_selected_configure.unwrap_or_default()].get_path().replace("{FOLDER}", self.projects[current_selected_project.unwrap_or_default()].get_folder());
+                let source_file: std::path::PathBuf = Path::new(&source_path.to_string()).join(&component_name);
+
                 if !source_file.exists()
                 {
                     self.message_log.add_message(format!("Not exists file copy: {}", source_file.display()), MessageType::Warning);
@@ -428,7 +450,7 @@ impl Widget for &App
             Line::from("| $$  | $$| $$  | $$|  $$$$$$/| $$  | $$"  ).style(Style::default().fg(Color::Blue)),
             Line::from("|__/  |__/|__/  |__/ \\____ $$$|__/  |__/" ).style(Style::default().fg(Color::Blue)),
             Line::from("                           \\__/          ").style(Style::default().fg(Color::Blue)),
-            Line::from(" [esud] mvtool v0.1.0 ").style(Style::default().fg(Color::DarkGray)).alignment(ratatui::layout::Alignment::Right),
+            Line::from(" [esud] mvtool v0.1.1 ").style(Style::default().fg(Color::DarkGray)).alignment(ratatui::layout::Alignment::Right),
         ]);
 
         let logo_block: Paragraph<'_> = Paragraph::new(logo).alignment(ratatui::layout::Alignment::Center);
@@ -533,6 +555,7 @@ impl Widget for &App
         components_vetical_checkbox_group.render(components_block.inner(components_area), buf);
         components_block.render(components_area, buf);
 
+        // RENDER SUBLAYOUT 2
         configures_vetical_checkbox_group.render(configures_block.inner(configures_area), buf);
         configures_block.render(configures_area, buf);
 

@@ -6,16 +6,16 @@ use crate::Component;
 pub struct Project
 {
     name: String,
-    path: String,
+    folder: String,
     components: Vec<Component>,
     selected: bool,
 }
 
 impl Project
 {
-    pub fn new(name: String, path: String, components: Vec<Component>, selected: bool) -> Self
+    pub fn new(name: String, folder: String, components: Vec<Component>, selected: bool) -> Self
     {
-        return Self { name: name, path: path, components: components, selected: selected };
+        return Self { name: name, folder: folder, components: components, selected: selected };
     }
 
     pub fn get_name(&self) -> &String
@@ -23,9 +23,9 @@ impl Project
         return &self.name;
     }
 
-    pub fn get_path(&self) -> &String
+    pub fn get_folder(&self) -> &String
     {
-        return &self.path;
+        return &self.folder;
     }
 
     pub fn get_components_mut(&mut self) -> &mut Vec<Component>

@@ -4,6 +4,7 @@
 pub struct Configure
 {
     name: String,
+    path: String,
     prefix: String,
 
     selected: bool,
@@ -11,14 +12,19 @@ pub struct Configure
 
 impl Configure
 {
-    pub fn new(name: String, prefix: String, selected: bool) -> Self
+    pub fn new(name: String, path: String, prefix: String, selected: bool) -> Self
     {
-        return Self { name: name, prefix: prefix, selected: selected };
+        return Self { name: name, path: path, prefix: prefix, selected: selected };
     }
 
     pub fn get_name(&self) -> &String
     {
         return &self.name;
+    }
+
+    pub fn get_path(&self) -> &String
+    {
+        return &self.path;
     }
 
     pub fn get_prefix(&self) -> &String
