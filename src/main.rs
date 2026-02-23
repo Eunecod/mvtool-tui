@@ -1,7 +1,7 @@
 // src/main.rs
 
 //   /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$  | 
-//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v0.1.2
+//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v1.1.2
 // | $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$ | 30/01/2025
 // | $$  | $$| $$  | $$|  $$$$$$/| $$  | $$ | 
 // |__/  |__/|__/  |__/ \____ $$$|__/  |__/ | Лецензии нет делай все что хочешь форкай не форкай копипасти ломай строй и т.д. :)
@@ -403,7 +403,7 @@ impl Widget for &App
             Line::from("| $$  | $$| $$  | $$|  $$$$$$/| $$  | $$").blue().centered(),
             Line::from("|__/  |__/|__/  |__/ \\____ $$$|__/  |__/").blue().centered(),
             Line::from("                           \\__/          ").blue().centered(),
-            Line::from(" [esud] mvtool v0.1.2 ").dark_gray().right_aligned(),
+            Line::from(" [esud] mvtool v1.1.2 ").dark_gray().right_aligned(),
         ];
         let logo_block: Paragraph<'_> = Paragraph::new(logo_lines).alignment(ratatui::layout::Alignment::Center);
 
