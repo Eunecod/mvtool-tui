@@ -1,4 +1,4 @@
-// objects/component.rs
+// src/objects/component.rs
 
 #[derive(Debug, Default)]
 pub struct Component
@@ -11,7 +11,7 @@ impl Component
 {
     pub fn new(name: String, selected: bool) -> Self
     {
-        return Self { name: name, selected: selected };
+        return Self { name, selected };
     }
 
     pub fn get_name(&self) -> &String

@@ -1,9 +1,11 @@
-// objects/mod.rs
+// src/objects/mod.rs
 
-pub mod component;
-pub mod configure;
-pub mod project;
+mod project;
+mod configure;
+mod component;
+mod script;
 
-pub use component::Component;
-pub use configure::Configure;
 pub use project::Project;
+pub use configure::Configure;
+pub use component::Component;
+pub use script::Script;

@@ -1,83 +1,52 @@
+// src/main.rs
 
 //   /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$  | 
-//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v0.1.0
+//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v0.1.2
 // | $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$ | 30/01/2025
 // | $$  | $$| $$  | $$|  $$$$$$/| $$  | $$ | 
 // |__/  |__/|__/  |__/ \____ $$$|__/  |__/ | Лецензии нет делай все что хочешь форкай не форкай копипасти ломай строй и т.д. :)
-//                            \__/          | 
+//                            \__/          |   
 
 mod objects;
 mod utils;
 mod ui;
 
-use std::{fs, io, path::Path, collections::HashSet};
-use crossterm::{event::{self, Event, KeyCode, KeyEvent, KeyEventKind}};
-use ratatui::{DefaultTerminal, Frame, buffer::{Buffer}, layout::{Constraint, Layout, Rect, Spacing}, style::{Color, Style, Stylize}, symbols::border, text::{Line, Text}, widgets::{Block, Padding, Paragraph, Widget}};
-use serde_json::{Value};
-
-use ui::checkbox::{Checkbox, CheckboxState, LayoutCheckboxGroup, VeticalCheckboxGroup, HorizontalCheckboxGroup};
-use ui::messagelog::{MessageLog, MessageType};
-use objects::{Component, Project, Configure}; 
+use std::{ fs, io, collections::HashSet, process::{ Command, Stdio} };
+use crossterm::event::{ self, Event, KeyCode, KeyEventKind };
+use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Rect }, style::{ Color, Style, Stylize, Modifier }, text::{ Line, Span }, widgets::{ Block, Paragraph, Widget, Padding }, DefaultTerminal, Frame };
+use serde_json::Value;
+use ui::checkbox::layout::LayoutCheckboxGroup;
+use ui::checkbox::{ Checkbox, CheckboxState, HorizontalCheckboxGroup, VerticalCheckboxGroup };
+use ui::messagelog::{ MessageLog, MessageType };
+use objects::{ Project, Script, Configure };
 use utils::Utils;
 
 fn main() -> io::Result<()>
 {
-    ratatui::run(|terminal| App::default().run(terminal))
+    return ratatui::run(|terminal: &mut ratatui::Terminal<ratatui::prelude::CrosstermBackend<io::Stdout>>| App::default().run(terminal));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 enum ActiveArea
 {
-    #[default]
-    Project, 
+    #[default] Project,
     Configure,
     Component,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-enum DirectionTab
-{
-    #[default]
-    Next,
-    Prev,
-}
-
-#[derive(Debug, Default)]
-struct Setting
-{
-    path: String,
-}
-
-impl Setting
-{
-    fn new(path: String) -> Self
-    {
-        return Self { path: path };
-    }
-
-    fn get_path(&self) -> &String
-    {
-        return &self.path;
-    }
-
+    Scripts,
 }
 
 #[derive(Debug, Default)]
 pub struct App
 {
     projects: Vec<Project>,
-    configures: Vec<Configure>,
-    setting: Setting,
     prefix_exceptions: HashSet<String>,
-
     selected_project: usize,
     selected_configure: usize,
     selected_component: usize,
-
+    selected_script: usize,
+    scroll_offsets: [usize; 4],
     active_area: ActiveArea,
-
     message_log: MessageLog,
-
     exit: bool,
 }
 
@@ -85,68 +54,58 @@ impl App
 {
     pub fn init(&mut self)
     {
-        self.active_area = ActiveArea::Project;
-        self.selected_project   = 0;
-        self.selected_configure = 0;
-        self.selected_component = 0;
-
-        self.message_log = MessageLog::default();
-
-        let content = fs::read_to_string("setting.json").unwrap_or(String::new()); 
-
-        let json_body: Value = serde_json::from_str(&content).unwrap_or(Value::Null);
-        if json_body.is_null()
+        let content: String = fs::read_to_string("setting.json").unwrap_or_default();
+        let json: Value = serde_json::from_str(&content).unwrap_or(Value::Null);
+        if json.is_null()
         {
-            self.message_log.add_message("Initialization mvtool finished error: not load json".to_string(), MessageType::Error);
+            self.message_log.add_message("Failed to load setting.json".into(), MessageType::Error);
             return;
         }
 
-        for project in json_body["projects"].as_array().unwrap_or(&vec![])
+        self.prefix_exceptions = json["prefix_exceptions"].as_array().unwrap_or(&vec![]).iter().filter_map(|v: &Value| v.as_str()).map(|s: &str| s.to_string()).collect();
+
+        for projects in json["projects"].as_array().unwrap_or(&vec![])
         {
-            let mut components: Vec<Component> = Vec::new();
-            for component in project["components"].as_array().unwrap_or(&vec![])
+            let mut configures: Vec<Configure> = Vec::new();
+            for configure in projects["configures"].as_array().unwrap_or(&vec![])
             {
-                let name: String = component["name"].as_str().unwrap_or("[undefined]").to_string();
-                let selected: bool = component["selected"].as_bool().unwrap_or(false);
+                let components: Vec<objects::Component> = configure["components"].as_array().unwrap_or(&vec![]).iter().map(|component: &Value|
+                    {
+                        objects::Component::new(component["name"].as_str().unwrap_or_default().to_string(), component["selected"].as_bool().unwrap_or(false))
+                    }
+                ).collect();
 
-                components.push(Component::new(name, selected));  
+                let scripts: Vec<Script> = configure["scripts"].as_array().unwrap_or(&vec![]).iter().map(|script|
+                    {
+                        Script::new(script["name"].as_str().unwrap_or_default().to_string(), script["command"].as_str().unwrap_or_default().to_string())
+                    }
+                ).collect();
+
+                configures.push(Configure::new(
+                    configure["name"].as_str().unwrap_or_default().to_string(),
+                    configure["source_path"].as_str().unwrap_or_default().to_string(),
+                    configure["prefix"].as_str().unwrap_or_default().to_string(),
+                    configure["selected"].as_bool().unwrap_or(false),
+                    configure["clean_destination"].as_bool().unwrap_or(false),
+                    components, scripts,
+                ));
             }
-
-            let name: String = project["name"].as_str().unwrap_or("[undefined]").to_string();
-            let folder: String = project["folder"].as_str().unwrap_or("[undefined]").to_string();
-            let selected: bool = project["selected"].as_bool().unwrap_or(false);
-
-            self.projects.push(Project::new(name, folder, components, selected));
+            self.projects.push(Project::new(
+                projects["name"].as_str().unwrap_or_default().to_string(),
+                projects["destination_path"].as_str().unwrap_or_default().to_string(),
+                configures, projects["selected"].as_bool().unwrap_or(false),
+            ));
         }
 
-        self.prefix_exceptions = json_body["prefix_exceptions"].as_array().unwrap_or(&vec![]).iter().filter_map(|value| value.as_str()).map(|value| value.trim_matches('"').to_string()).collect();
-        for configure in json_body["configure"].as_array().unwrap_or(&vec![])
-        { 
-            let name: String = configure["name"].as_str().unwrap_or("[undefined]").to_string();
-            let path: String = configure["path"].as_str().unwrap_or("[undefined]").to_string();
-            let prefix: String = configure["prefix"].as_str().unwrap_or("[undefined]").to_string();
-            let selected: bool = configure["selected"].as_bool().unwrap_or(false);
-
-            self.configures.push(Configure::new(name, path, prefix, selected));
-        }
-
-        self.setting = Setting::new(json_body["settings"]["path"].as_str().unwrap_or("").to_string()); 
-        if self.setting.get_path().is_empty()
-        {
-            self.message_log.add_message("Initialization mvtool finished error: setting path is empty".to_string(), MessageType::Error);
-            return;
-        }    
-
-        self.message_log.add_message("Initialization success done mvtool".to_string(), MessageType::Info);
+        self.message_log.add_message("Initialized 'mvtool' go working! ;)".into(), MessageType::Success);
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()>
     {
         self.init();
-
         while !self.exit
         {
-            terminal.draw( |frame: &mut Frame<'_>| { self.draw(frame); })?;
+            terminal.draw(|f: &mut Frame<'_>| self.draw(f))?;
             self.handle_events()?;
         }
 
@@ -158,265 +117,267 @@ impl App
         self.render(frame.area(), frame.buffer_mut());
     }
 
+    fn area_style(&self, area: ActiveArea) -> Style
+    {
+        if self.active_area == area
+        {
+            return Style::default().fg(Color::White);
+        }
+        else
+        {
+            return Style::default().fg(Color::DarkGray);
+        }
+    }
+
     fn handle_events(&mut self) -> io::Result<()>
     {
-        match event::read()?
+        if let Event::Key(key) = event::read()?
         {
-            Event::Key(key_event) =>
+            if key.kind == KeyEventKind::Press
             {
-                if key_event.kind == KeyEventKind::Press
+                match key.code
                 {
-                    self.handle_key_event(key_event)
+                    KeyCode::Up        => self.move_selection(-1),
+                    KeyCode::Down      => self.move_selection(1),
+                    KeyCode::Left      => self.move_project(-1),
+                    KeyCode::Right     => self.move_project(1),
+                    KeyCode::Char(' ') => self.on_action(),
+                    KeyCode::Tab       => self.next_area(true),
+                    KeyCode::BackTab   => self.next_area(false),
+                    KeyCode::F(1)      => self.ok(),
+                    KeyCode::Esc       => self.exit = true,
+
+                    _ => {}
                 }
             }
-            _ => { }
-        };
+        }
 
         return Ok(());
     }
 
-    fn handle_key_event(&mut self, key_event: KeyEvent)
+    fn move_selection(&mut self, delta: i32)
     {
-        match key_event.code
+        match self.active_area
         {
-            KeyCode::Up        => self.up(),
-            KeyCode::Down      => self.down(),
-            KeyCode::Left      => self.left(),
-            KeyCode::Right     => self.right(),
-            KeyCode::Char(' ') => self.pick(),
-            KeyCode::F(1)      => self.ok(),
+            ActiveArea::Configure =>
+            {
+                let len: usize = self.projects[self.selected_project].get_configures().len();
+                if len == 0
+                {
+                    return;
+                }
 
-            KeyCode::Esc       => self.exit(),
-            KeyCode::Tab       => self.toggle_active_area(DirectionTab::Next),
-            KeyCode::BackTab   => self.toggle_active_area(DirectionTab::Prev),
+                self.selected_configure = (self.selected_configure as i32 + delta).clamp(0, len as i32 - 1) as usize;
+                self.upd_scroll(1, self.selected_configure, 3);
+            }
+            ActiveArea::Component =>
+            {
+                let len: usize = self.projects[self.selected_project].get_configures()[self.selected_configure].get_components().len();
+                if len == 0
+                {
+                    return;
+                }
 
-            _ => { }   
+                self.selected_component = (self.selected_component as i32 + delta).clamp(0, len as i32 - 1) as usize;
+                self.upd_scroll(2, self.selected_component, 8);
+            }
+            ActiveArea::Scripts =>
+            {
+                let len: usize = self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts().len();
+                if len == 0
+                {
+                    return;
+                }
+
+                self.selected_script = (self.selected_script as i32 + delta).clamp(0, len as i32 - 1) as usize;
+                self.upd_scroll(3, self.selected_script, 5);
+            }
+
+            _ => {}
         }
     }
 
-    fn exit(&mut self)
+    fn move_project(&mut self, delta: i32)
     {
-        self.exit = true;
+        if self.active_area == ActiveArea::Project && !self.projects.is_empty()
+        {
+            self.selected_project = (self.selected_project as i32 + delta).clamp(0, self.projects.len() as i32 - 1) as usize;
+            self.selected_configure = 0;
+            self.scroll_offsets[1] = 0;
+        }
+    }
+
+    fn upd_scroll(&mut self, a_idx: usize, cur: usize, vis: usize)
+    {
+        let offset = &mut self.scroll_offsets[a_idx];
+        if cur < *offset
+        {
+            *offset = cur;
+        }
+        else if cur >= *offset + vis
+        {
+            *offset = cur - vis + 1;
+        }
+    }
+
+    fn next_area(&mut self, forward: bool)
+    {
+        self.active_area = match (self.active_area, forward)
+        {
+            (ActiveArea::Project, true)    => ActiveArea::Configure,
+            (ActiveArea::Configure, true)  => ActiveArea::Component,
+            (ActiveArea::Component, true)  => ActiveArea::Scripts,
+            (ActiveArea::Scripts, true)    => ActiveArea::Project,
+            (ActiveArea::Project, false)   => ActiveArea::Scripts,
+            (ActiveArea::Scripts, false)   => ActiveArea::Component,
+            (ActiveArea::Component, false) => ActiveArea::Configure,
+            (ActiveArea::Configure, false) => ActiveArea::Project,
+        };
+    }
+
+    fn on_action(&mut self)
+    {
+        if self.projects.is_empty()
+        {
+            return;
+        }
+
+        match self.active_area
+        {
+            ActiveArea::Project =>
+            {
+                let selected: bool = self.projects[self.selected_project].is_selected();
+                self.projects.iter_mut().for_each(|p: &mut Project| p.set_selected(false));
+                self.projects[self.selected_project].set_selected(!selected);
+            }
+            ActiveArea::Configure =>
+            {
+                let project: &mut Project = &mut self.projects[self.selected_project];
+                let selected: bool = project.get_configures()[self.selected_configure].is_selected();
+
+                project.get_configures_mut().iter_mut().for_each(|configure: &mut Configure| configure.set_selected(false));
+                project.get_configures_mut()[self.selected_configure].set_selected(!selected);
+            }
+            ActiveArea::Component =>
+            {
+                let component: &mut objects::Component = &mut self.projects[self.selected_project].get_configures_mut()[self.selected_configure].get_components_mut()[self.selected_component];
+                component.set_selected(!component.is_selected());
+            }
+            ActiveArea::Scripts =>
+            {
+                let script: &Script = &self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts()[self.selected_script];
+                let config: &Configure = &self.projects[self.selected_project].get_configures()[self.selected_configure];
+
+                self.message_log.add_message(format!("Running: {}", script.get_name()), MessageType::Info);
+
+                let status: Result<std::process::ExitStatus, io::Error> = Command::new("cmd")
+                    .args(["/C", script.get_command()])
+                    .current_dir(config.get_path())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status();
+
+                match status
+                {
+                    Ok(stat)
+                    if stat.success() =>
+                    {
+                        self.message_log.add_message(format!("Success: {}", script.get_name()), MessageType::Success);
+                    }
+                    _ =>
+                    {
+                        self.message_log.add_message(format!("Failed to run or script error: {}", script.get_name()), MessageType::Error);
+                    }
+                }
+            }
+        }
     }
 
     fn ok(&mut self)
     {
-        let mut current_selected_project: Option<usize> = Option::None;
-        for (index, project) in self.projects.iter().enumerate()
+        self.message_log.add_message("Starting...".into(), MessageType::Info);
+        
+        for project in &self.projects
         {
-            if project.is_selected()
+            if !project.is_selected()
             {
-                current_selected_project = Some(index);
+                continue;
             }
-        }
-
-        let mut current_selected_configure: Option<usize> = Option::None;
-        for (index, configure) in self.configures.iter().enumerate()
-        {
-            if configure.is_selected()
+            let dest_path = project.get_destination();
+            
+            for config in project.get_configures()
             {
-                current_selected_configure = Some(index);
-            }
-        }
-
-        if current_selected_project.is_none() || current_selected_configure.is_none()
-        {
-            self.message_log.add_message("Not supported project or configure".to_string(), MessageType::Warning);
-            return;
-        }
-
-        let destination_path: String = self.setting.get_path().replace("{PROJECT}", self.projects[current_selected_project.unwrap_or_default()].get_name());
-        let destination_dir: &Path = Path::new(&destination_path);
-
-        let mut quantity_copied: u32 = 0;
-        for component in self.projects[current_selected_project.unwrap_or_default()].get_components()
-        {
-            if component.is_selected()
-            {
-                let mut component_name: String = component.get_name().clone();
-                if !self.prefix_exceptions.contains(&component_name)
+                if !config.is_selected()
                 {
-                    component_name = Utils::add_prefix_before_ext(&component_name, self.configures[current_selected_configure.unwrap_or_default()].get_prefix());
+                    continue;
                 }
 
-                if component_name.is_empty()
-                {
-                    self.message_log.add_message(format!("Prefix broken name your pick component - '{}'", &component.get_name()), MessageType::Warning);
-                    return;
+                let src_path: &String = config.get_path();
+                let prefix: &String = config.get_prefix();
+
+                if config.should_clean() { 
+                    self.message_log.add_message("Cleaning components...".into(), MessageType::Info);
+                    
+                    if let Ok(entries) = fs::read_dir(dest_path)
+                    {
+                        for entry in entries.flatten()
+                        {
+                            let file_name: String = entry.file_name().to_string_lossy().to_string();
+                            
+                            for component in config.get_components()
+                            {
+                                let is_exist: bool = self.prefix_exceptions.contains(component.get_name());
+                                let pattern: String = Utils::get_search_pattern(component.get_name(), prefix, is_exist);
+                                
+                                if file_name.contains(&pattern)
+                                {
+                                    let _ = fs::remove_file(entry.path());
+                                    break; 
+                                }
+                            }
+                        }
+                    }
                 }
 
-                let source_path: String = self.configures[current_selected_configure.unwrap_or_default()].get_path().replace("{FOLDER}", self.projects[current_selected_project.unwrap_or_default()].get_folder());
-                let source_file: std::path::PathBuf = Path::new(&source_path.to_string()).join(&component_name);
-
-                if !source_file.exists()
+                let mut copied_count: usize = 0;
+                let mut copied_total: usize = 0;
+                if let Ok(entries) = fs::read_dir(src_path)
                 {
-                    self.message_log.add_message(format!("Not exists file copy: {}", source_file.display()), MessageType::Warning);
-                    return;
-                }
-                if !destination_dir.exists()
-                {
-                    self.message_log.add_message(format!("Not exists directory coped: {}", destination_dir.display()), MessageType::Warning);
-                    return;
-                }
-                
-                let destination_file: std::path::PathBuf = destination_dir.join(&component_name);
+                    for entry in entries.flatten()
+                    {
+                        let file_name: String = entry.file_name().to_string_lossy().to_string();
+                        
+                        for component in config.get_components()
+                        {
+                            if !component.is_selected()
+                            {
+                                continue;
+                            }
+                            
+                            let is_exist: bool = self.prefix_exceptions.contains(component.get_name());
+                            let pattern: String = Utils::get_search_pattern(component.get_name(), prefix, is_exist);
 
-                fs::copy(&source_file, &destination_file).unwrap();
-                quantity_copied += 1;
-            }
-        }
+                            if file_name.contains(&pattern)
+                            {
+                                let to: std::path::PathBuf = std::path::Path::new(dest_path).join(&file_name);
+                                if fs::copy(entry.path(), to).is_ok()
+                                {
+                                    copied_count += 1;
+                                    self.message_log.add_message(format!("Processed copying {}: {}", copied_count, file_name), MessageType::Success);
+                                }
+                                copied_total += 1;
+                            }
+                        }
+                    }
 
-        self.message_log.add_message(format!("Copied {} file to {}", quantity_copied, destination_dir.display()), MessageType::Success);
-    }
-
-    fn up(&mut self)
-    {
-        match self.active_area
-        {
-            ActiveArea::Configure => 
-            {
-                if self.selected_configure != 0
-                {
-                    self.selected_configure -= 1;
-                }
-            },
-            ActiveArea::Component => 
-            {
-                if self.selected_component != 0
-                {
-                    self.selected_component -= 1;
-                }
-            },
-
-            _ => { }   
-        };
-    }
-
-    fn down(&mut self)
-    {
-        match self.active_area
-        {
-            ActiveArea::Component => 
-            {
-                if self.selected_component < self.projects[self.selected_project].get_components().len() - 1
-                {
-                    self.selected_component += 1;
-                }
-            },
-            ActiveArea::Configure => 
-            {
-                if self.selected_configure < self.configures.len() - 1
-                {
-                    self.selected_configure += 1;
-                }
-            },
-
-            _ => { }   
-        };
-    }
-
-    fn left(&mut self)
-    {
-        match self.active_area
-        {
-            ActiveArea::Project => 
-            {
-                if self.selected_project != 0
-                {
-                    self.selected_project -= 1;
-                }
-            },
-
-            _ => { }   
-        };
-    }
-
-    fn right(&mut self)
-    {
-        match self.active_area
-        {
-            ActiveArea::Project => 
-            {
-                if self.selected_project < self.projects.len() - 1
-                {
-                    self.selected_project += 1;
-                }
-            },
-
-            _ => { }   
-        };
-    }
-
-    fn toggle_active_area(&mut self, direction: DirectionTab)
-    {
-        match self.active_area
-        {
-            ActiveArea::Project =>
-            {
-                if direction == DirectionTab::Next
-                {
-                    self.active_area = ActiveArea::Configure;
+                    self.message_log.add_message(format!("Finished copying {}/{}: {}", copied_count, copied_total, dest_path), MessageType::Success);
                 }
                 else
                 {
-                    self.active_area = ActiveArea::Component;
+                    self.message_log.add_message(format!("Failed to read source directory: {}", src_path), MessageType::Error);
                 }
-            },
-            ActiveArea::Configure => 
-            {
-                if direction == DirectionTab::Next
-                {
-                    self.active_area = ActiveArea::Component;
-                }
-                else
-                {
-                    self.active_area = ActiveArea::Project;
-                }
-            },
-            ActiveArea::Component => 
-            {
-                if direction == DirectionTab::Next
-                {
-                    self.active_area = ActiveArea::Project;
-                }
-                else 
-                {
-                    self.active_area = ActiveArea::Configure;
-                }
-            },   
-        };
-    }
-
-    fn pick(&mut self)
-    {
-        match self.active_area
-        {
-            ActiveArea::Project =>
-            {
-                for project in self.projects.iter_mut()
-                {
-                    project.set_selected(false);
-                }
-                
-                let is_selected: bool = self.projects[self.selected_project].is_selected();
-                self.projects[self.selected_project].set_selected(!is_selected);
-            },
-            ActiveArea::Configure => 
-            {
-                for configure in self.configures.iter_mut()
-                {
-                    configure.set_selected(false);
-                }
-
-                let is_selected: bool = self.configures[self.selected_configure].is_selected();
-                self.configures[self.selected_configure].set_selected(!is_selected);
-            },
-            ActiveArea::Component => 
-            {
-                let is_selected: bool = self.projects[self.selected_project].get_components()[self.selected_component].is_selected();
-                self.projects[self.selected_project].get_components_mut()[self.selected_component].set_selected(!is_selected);
-            }, 
-        };
+            }
+        }
     }
 }
 
@@ -424,140 +385,150 @@ impl Widget for &App
 {
     fn render(self, area: Rect, buf: &mut Buffer)
     {
-        let [logo_area, project_area, setting_area, console_area] = Layout::vertical([
+        let [logo_area, project_area, middle_area, console_area] = Layout::vertical([
             Constraint::Length(7),
             Constraint::Length(5),
             Constraint::Min(1),
             Constraint::Length(3),
-            ])
-        .margin(0)
-        .spacing(Spacing::Overlap(0))
-        .areas(area);
-        
-        let [configures_area, components_area] = Layout::horizontal([
-            Constraint::Percentage(30),
-            Constraint::Percentage(70),
-            ])
-        .margin(0)
-        .spacing(Spacing::Overlap(0))
-        .areas(setting_area);    
+        ]).areas(area);
+
+        let [side_area, component_area] = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(middle_area);
+        let [configure_area, script_area] = Layout::vertical([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(side_area);
 
         // LOGO
-        let logo: Text<'_> = Text::from(vec![
-            Line::from("  /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$ "  ).style(Style::default().fg(Color::Blue)),
-            Line::from(" /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$"  ).style(Style::default().fg(Color::Blue)),
-            Line::from("| $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$"  ).style(Style::default().fg(Color::Blue)),
-            Line::from("| $$  | $$| $$  | $$|  $$$$$$/| $$  | $$"  ).style(Style::default().fg(Color::Blue)),
-            Line::from("|__/  |__/|__/  |__/ \\____ $$$|__/  |__/" ).style(Style::default().fg(Color::Blue)),
-            Line::from("                           \\__/          ").style(Style::default().fg(Color::Blue)),
-            Line::from(" [esud] mvtool v0.1.1 ").style(Style::default().fg(Color::DarkGray)).alignment(ratatui::layout::Alignment::Right),
-        ]);
+        let logo_lines: Vec<Line<'_>> = vec![
+            Line::from("  /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$ ").blue().centered(),
+            Line::from(" /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$").blue().centered(),
+            Line::from("| $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$").blue().centered(),
+            Line::from("| $$  | $$| $$  | $$|  $$$$$$/| $$  | $$").blue().centered(),
+            Line::from("|__/  |__/|__/  |__/ \\____ $$$|__/  |__/").blue().centered(),
+            Line::from("                           \\__/          ").blue().centered(),
+            Line::from(" [esud] mvtool v0.1.1 ").dark_gray().right_aligned(),
+        ];
+        let logo_block: Paragraph<'_> = Paragraph::new(logo_lines).alignment(ratatui::layout::Alignment::Center);
 
-        let logo_block: Paragraph<'_> = Paragraph::new(logo).alignment(ratatui::layout::Alignment::Center);
+        // PROJECT LIST
+        let project_block: Block<'_> = Block::bordered().title(" projects ".bold()).border_set(border::THICK).border_style(self.area_style(ActiveArea::Project)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
 
-        // PROJECTS LIST
-        let projects_block: Block<'_> = Block::bordered().title(" projects ".bold()).border_set(border::THICK).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 })
-        .border_style(if self.active_area == ActiveArea::Project { Style::default().fg(Color::Gray) } else { Style::default().fg(Color::DarkGray) });
-
-        let mut projects_horizontal_checkbox_group: HorizontalCheckboxGroup = HorizontalCheckboxGroup::new();
-        projects_horizontal_checkbox_group.aligment(ratatui::layout::Alignment::Center);
-        for (index, project) in self.projects.iter().map(|project: &Project| project.get_name()).enumerate()
+        let mut project_group: HorizontalCheckboxGroup<'_> = HorizontalCheckboxGroup::new();
+        for (i, p) in self.projects.iter().enumerate()
         {
-            let mut checkbox: Checkbox<'_> = Checkbox::new(project);
-            let mut state: CheckboxState = CheckboxState::new(self.projects[index].is_selected()); 
-            state.set_enable_signed_highlight(false);
-
-            match self.active_area
+            let mut state: CheckboxState = CheckboxState::new(p.is_selected());
+            if self.active_area == ActiveArea::Project
             {
-                ActiveArea::Project =>
+                state.focus();
+                if i == self.selected_project
                 {
-                    state.focus();
-                    if self.selected_project == index
-                    {
-                        state.highlight();
-                    }
+                    state.highlight();
                 }
-                _ => { }
-            }
+            }  
 
-            checkbox.set_state(state);
-            projects_horizontal_checkbox_group.add_checkbox(checkbox);
+            project_group.add_checkbox(
+                {
+                    let mut checkbox: Checkbox<'_> = Checkbox::new(p.get_name());
+                    checkbox.set_state(state);
+                    checkbox
+                }
+            );
         }
 
-        // CONFIGURES LIST
-        let configures_block: Block<'_> = Block::bordered().title(" configure ".bold()).border_set(border::THICK).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 })
-        .border_style(if self.active_area == ActiveArea::Configure { Style::default().fg(Color::Gray) } else { Style::default().fg(Color::DarkGray) });
-
-        let mut configures_vetical_checkbox_group: VeticalCheckboxGroup = VeticalCheckboxGroup::new();
-        configures_vetical_checkbox_group.aligment(ratatui::layout::Alignment::Left);
-        for (index,configure) in self.configures.iter().enumerate()
+        if self.projects.is_empty()
         {
-            let mut checkbox: Checkbox<'_> = Checkbox::new(&configure.get_name());
-            let mut state: CheckboxState = CheckboxState::new(configure.is_selected()); 
-
-            match self.active_area
-            {
-                ActiveArea::Configure =>
-                {
-                    state.focus();
-                    if self.selected_configure == index
-                    {
-                        state.highlight();
-                    }
-                }
-                _ => { }
-            }
-
-            checkbox.set_state(state);
-            configures_vetical_checkbox_group.add_checkbox(checkbox);
+            return;
         }
 
-        // COMPONENTS LIST  
-        let components_block: Block<'_> = Block::bordered().title(" components ".bold()).border_set(border::THICK).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 })
-        .border_style(if self.active_area == ActiveArea::Component { Style::default().fg(Color::Gray) } else { Style::default().fg(Color::DarkGray) });
-
-        let mut components_vetical_checkbox_group: VeticalCheckboxGroup = VeticalCheckboxGroup::new();
-        components_vetical_checkbox_group.aligment(ratatui::layout::Alignment::Left);
-        for (index, component) in self.projects[self.selected_project].get_components().iter().enumerate()
+        // CONFIGURE LIST
+        let configure_block: Block<'_> = Block::bordered().title(" configure ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
+        
+        let configures: &Vec<Configure> = self.projects[self.selected_project].get_configures();
+        let mut configure_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
+        for (i, configure) in configures.iter().enumerate().skip(self.scroll_offsets[1])
         {
-            let mut checkbox: Checkbox<'_> = Checkbox::new(&component.get_name());
-            let mut state: CheckboxState = CheckboxState::new(component.is_selected()); 
-
-            match self.active_area
+            let mut state: CheckboxState = CheckboxState::new(configure.is_selected());
+            if self.active_area == ActiveArea::Configure
             {
-                ActiveArea::Component =>
+                state.focus(); if i == self.selected_configure
                 {
-                    state.focus();
-                    if self.selected_component == index
-                    {
-                        state.highlight();
-                    }
+                    state.highlight();
                 }
-                _ => { }
             }
 
-            checkbox.set_state(state);
-            components_vetical_checkbox_group.add_checkbox(checkbox);
+            configure_group.add_checkbox(
+                {
+                    let mut checkbox: Checkbox<'_> = Checkbox::new(configure.get_name());
+                    checkbox.set_state(state);
+                    checkbox
+                }
+            );
+        }
+
+        // COMPONENT LIST
+        let component_block: Block<'_> = Block::bordered().title(" components ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
+
+        let components: &Vec<objects::Component> = configures[self.selected_configure].get_components();
+        let mut component_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
+        for (i, component) in components.iter().enumerate().skip(self.scroll_offsets[2])
+        {
+            let mut state: CheckboxState = CheckboxState::new(component.is_selected());
+            if self.active_area == ActiveArea::Component
+            {
+                state.focus();
+                if i == self.selected_component
+                {
+                    state.highlight();
+                }
+            }
+
+            component_group.add_checkbox(
+                {
+                    let mut checkbox: Checkbox<'_> = Checkbox::new(component.get_name());
+                    checkbox.set_state(state);
+                    checkbox
+                }
+            );
+        }
+
+        // SCRIPT LIST
+        let script_block: Block<'_> = Block::bordered().title(" scripts ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Scripts));
+        let script_inner: Rect = script_block.inner(script_area);
+
+        let scripts: &Vec<Script> = configures[self.selected_configure].get_scripts();
+        for (i, s) in scripts.iter().enumerate().skip(self.scroll_offsets[3])
+        {
+            let y = script_inner.y + 1 + (i - self.scroll_offsets[3]) as u16; 
+            if y >= script_inner.bottom().saturating_sub(1)
+            {
+                break;
+            }
+
+            let is_select: bool = i == self.selected_script && self.active_area == ActiveArea::Scripts;
+            let style: Style = if is_select { Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::DarkGray) };
+            let line: Line<'_> = Line::from(vec![Span::styled(" > ", style), Span::styled(s.get_name(), style)]);
+
+            buf.set_line(script_inner.x + 1, y, &line, script_inner.width.saturating_sub(2));
         }
 
         // CONSOLE
         let console_block: Block<'_> = Block::bordered().title(" console ").border_set(border::THICK).padding(Padding { left: 1, right: 0, top: 0, bottom: 0 });
         let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
-
+        
         // RENDER MAINLAYOUT 0
         logo_block.render(logo_area, buf);
 
         // RENDER SUBLAYOUT 0
-        projects_horizontal_checkbox_group.render(projects_block.inner(project_area), buf);
-        projects_block.render(project_area, buf);
+        project_group.render(project_block.inner(project_area), buf);
+        project_block.render(project_area, buf);
 
         // RENDER SUBLAYOUT 1
-        components_vetical_checkbox_group.render(components_block.inner(components_area), buf);
-        components_block.render(components_area, buf);
+        component_group.render(component_block.inner(component_area), buf);
+        component_block.render(component_area, buf);
 
         // RENDER SUBLAYOUT 2
-        configures_vetical_checkbox_group.render(configures_block.inner(configures_area), buf);
-        configures_block.render(configures_area, buf);
+        configure_group.render(configure_block.inner(configure_area), buf);
+        configure_block.render(configure_area, buf);
+
+        // RENDER SUBLAYOUT 3
+        script_block.render(script_area, buf); 
 
         // RENDER MAINLAYOUT 1
         console.render(console_area, buf);

@@ -1,16 +1,26 @@
-// ui/checkbox/layout.rs
+// src/ui/checkbox/layout.rs
 
 use crate::ui::checkbox::Checkbox;
+use ratatui::layout::Alignment;
 
+#[allow(dead_code)]
 pub trait LayoutCheckboxGroup<'a>
 {
     fn new() -> Self;
     fn add_checkbox(&mut self, checkbox: Checkbox<'a>);
-    fn aligment(&mut self, value: ratatui::layout::Alignment);
+    fn alignment(&mut self, value: Alignment);
 }
 
 pub struct LayoutCheckboxGroupData<'a>
 {
     pub checkboxes: Vec<Checkbox<'a>>,
-    pub aligment: ratatui::layout::Alignment,
+    pub alignment: Alignment,
+}
+
+impl<'a> Default for LayoutCheckboxGroupData<'a>
+{
+    fn default() -> Self
+    {
+        return Self { checkboxes: Vec::new(), alignment: Alignment::Left };
+    }
 }

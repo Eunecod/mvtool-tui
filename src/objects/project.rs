@@ -1,21 +1,21 @@
-// objects/project.rs
+// src/objects/project.rs
 
-use crate::Component;
+use crate::objects::Configure;
 
 #[derive(Debug, Default)]
 pub struct Project
 {
     name: String,
-    folder: String,
-    components: Vec<Component>,
+    destination_path: String,
+    configures: Vec<Configure>,
     selected: bool,
 }
 
 impl Project
 {
-    pub fn new(name: String, folder: String, components: Vec<Component>, selected: bool) -> Self
+    pub fn new(name: String, destination_path: String, configures: Vec<Configure>, selected: bool) -> Self
     {
-        return Self { name: name, folder: folder, components: components, selected: selected };
+        return Self { name, destination_path, configures, selected };
     }
 
     pub fn get_name(&self) -> &String
@@ -23,19 +23,19 @@ impl Project
         return &self.name;
     }
 
-    pub fn get_folder(&self) -> &String
-    {
-        return &self.folder;
+    pub fn get_destination(&self) -> &String
+    { 
+        return &self.destination_path;
     }
 
-    pub fn get_components_mut(&mut self) -> &mut Vec<Component>
-    {
-        return &mut self.components;
+    pub fn get_configures(&self) -> &Vec<Configure>
+    { 
+        return &self.configures;
     }
 
-    pub fn get_components(&self) -> &Vec<Component>
+    pub fn get_configures_mut(&mut self) -> &mut Vec<Configure>
     {
-        return &self.components;
+        return &mut self.configures;
     }
 
     pub fn is_selected(&self) -> bool

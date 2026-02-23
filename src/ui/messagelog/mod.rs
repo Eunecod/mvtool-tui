@@ -1,4 +1,4 @@
-// ui/messagelog/mod.rs
+// src/ui/mod.rs
 
 pub mod messagelog;
 

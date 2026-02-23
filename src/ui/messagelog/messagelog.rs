@@ -1,6 +1,6 @@
-// ui/messagelog/messagelog.rs
+// src/ui/messagelog/messagelog.rs
 
-use ratatui::{style::{Color, Style}, text::Text, widgets::Paragraph};
+use ratatui::{ style::{ Color, Style }, text::Text, widgets::Paragraph };
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum MessageType
@@ -21,10 +21,6 @@ pub struct MessageLog
 
 impl MessageLog
 {
-    pub fn default() -> Self
-    {
-        return Self { message: "".to_string(), style: Style::default().fg(Color::Gray).bold() }
-    }
 
     pub fn add_message(&mut self, message: String, message_type: MessageType)
     {

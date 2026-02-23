@@ -1,18 +1,18 @@
-// utils/utils.rs
+// src/utils/utils.rs
 
-pub struct Utils; 
+pub struct Utils;
 
 impl Utils
 {
-    pub fn add_prefix_before_ext(filename: &String, prefix: &String) -> String
+    pub fn get_search_pattern(name: &str, prefix: &str, is_exception: bool) -> String
     {
-        let dot_position: Option<usize> = filename.rfind('.');
-        if dot_position.is_none()
+        if is_exception || prefix.is_empty()
         {
-            return "".to_string();
+            return name.to_string();
         }
-        
-        let (name, ext) = filename.split_at(dot_position.unwrap());
-        return format!("{}{}{}", name, prefix, ext);
-    } 
+        else
+        {
+            return format!("{}{}", name, prefix);
+        }
+    }
 }
