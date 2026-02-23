@@ -403,7 +403,7 @@ impl Widget for &App
             Line::from("| $$  | $$| $$  | $$|  $$$$$$/| $$  | $$").blue().centered(),
             Line::from("|__/  |__/|__/  |__/ \\____ $$$|__/  |__/").blue().centered(),
             Line::from("                           \\__/          ").blue().centered(),
-            Line::from(" [esud] mvtool v0.1.1 ").dark_gray().right_aligned(),
+            Line::from(" [esud] mvtool v0.1.2 ").dark_gray().right_aligned(),
         ];
         let logo_block: Paragraph<'_> = Paragraph::new(logo_lines).alignment(ratatui::layout::Alignment::Center);
 
