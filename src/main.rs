@@ -401,7 +401,7 @@ impl Widget for &App
     fn render(self, area: Rect, buf: &mut Buffer)
     {
         let [logo_area, project_area, middle_area, console_area] = Layout::vertical([
-            Constraint::Length(7),
+            Constraint::Length(1),
             Constraint::Length(5),
             Constraint::Min(1),
             Constraint::Length(3),
@@ -412,12 +412,6 @@ impl Widget for &App
 
         // LOGO
         let logo_lines: Vec<Line<'_>> = vec![
-            Line::from("  /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$ ").blue().centered(),
-            Line::from(" /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$").blue().centered(),
-            Line::from("| $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$").blue().centered(),
-            Line::from("| $$  | $$| $$  | $$|  $$$$$$/| $$  | $$").blue().centered(),
-            Line::from("|__/  |__/|__/  |__/ \\____ $$$|__/  |__/").blue().centered(),
-            Line::from("                           \\__/          ").blue().centered(),
             Line::from(" [esud] mvtool v1.1.3 ").dark_gray().right_aligned(),
         ];
         let logo_block: Paragraph<'_> = Paragraph::new(logo_lines).alignment(ratatui::layout::Alignment::Center);
