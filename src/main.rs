@@ -1,7 +1,7 @@
 // src/main.rs
 
 //   /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$  | 
-//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v1.1.2
+//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v1.1.3
 // | $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$ | 30/01/2025
 // | $$  | $$| $$  | $$|  $$$$$$/| $$  | $$ | 
 // |__/  |__/|__/  |__/ \____ $$$|__/  |__/ | Лецензии нет делай все что хочешь форкай не форкай копипасти ломай строй и т.д. :)
@@ -40,6 +40,7 @@ pub struct App
 {
     projects: Vec<Project>,
     prefix_exceptions: HashSet<String>,
+    extension_mask: Vec<String>,
     selected_project: usize,
     selected_configure: usize,
     selected_component: usize,
@@ -63,6 +64,8 @@ impl App
         }
 
         self.prefix_exceptions = json["prefix_exceptions"].as_array().unwrap_or(&vec![]).iter().filter_map(|v: &Value| v.as_str()).map(|s: &str| s.to_string()).collect();
+
+        self.extension_mask = json["extension_mask"].as_array().unwrap_or(&vec![]).iter().filter_map(|v| v.as_str()).map(|s| s.replace("*.", "")) .collect();
 
         for projects in json["projects"].as_array().unwrap_or(&vec![])
         {
@@ -323,7 +326,13 @@ impl App
                         for entry in entries.flatten()
                         {
                             let file_name: String = entry.file_name().to_string_lossy().to_string();
-                            
+
+                            let matches_mask: bool = self.extension_mask.is_empty() || self.extension_mask.iter().any(|ext| file_name.ends_with(ext));
+                            if !matches_mask
+                            {
+                                continue;
+                            }
+
                             for component in config.get_components()
                             {
                                 let is_exist: bool = self.prefix_exceptions.contains(component.get_name());
@@ -347,6 +356,12 @@ impl App
                     {
                         let file_name: String = entry.file_name().to_string_lossy().to_string();
                         
+                        let matches_mask: bool = self.extension_mask.is_empty() || self.extension_mask.iter().any(|ext| file_name.ends_with(ext));
+                        if !matches_mask
+                        {
+                            continue;
+                        }
+
                         for component in config.get_components()
                         {
                             if !component.is_selected()
@@ -386,7 +401,7 @@ impl Widget for &App
     fn render(self, area: Rect, buf: &mut Buffer)
     {
         let [logo_area, project_area, middle_area, console_area] = Layout::vertical([
-            Constraint::Length(7),
+            Constraint::Length(1),
             Constraint::Length(5),
             Constraint::Min(1),
             Constraint::Length(3),
@@ -397,13 +412,7 @@ impl Widget for &App
 
         // LOGO
         let logo_lines: Vec<Line<'_>> = vec![
-            Line::from("  /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$ ").blue().centered(),
-            Line::from(" /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$").blue().centered(),
-            Line::from("| $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$").blue().centered(),
-            Line::from("| $$  | $$| $$  | $$|  $$$$$$/| $$  | $$").blue().centered(),
-            Line::from("|__/  |__/|__/  |__/ \\____ $$$|__/  |__/").blue().centered(),
-            Line::from("                           \\__/          ").blue().centered(),
-            Line::from(" [esud] mvtool v1.1.2 ").dark_gray().right_aligned(),
+            Line::from(" [esud] mvtool v1.1.3 ").dark_gray().right_aligned(),
         ];
         let logo_block: Paragraph<'_> = Paragraph::new(logo_lines).alignment(ratatui::layout::Alignment::Center);
 
