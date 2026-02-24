@@ -11,7 +11,7 @@ mod objects;
 mod utils;
 mod ui;
 
-use std::{ fs, io, collections::HashSet, process::{ Command, Stdio} };
+use std::{ fs, io, collections::HashSet, process::{ Command } };
 use crossterm::event::{ self, Event, KeyCode, KeyEventKind };
 use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Rect }, style::{ Color, Style, Stylize, Modifier }, text::{ Line, Span }, widgets::{ Block, Paragraph, Widget, Padding }, DefaultTerminal, Frame };
 use serde_json::Value;
@@ -273,12 +273,9 @@ impl App
 
                 self.message_log.add_message(format!("Running: {}", script.get_name()), MessageType::Info);
 
-                let status: Result<std::process::ExitStatus, io::Error> = Command::new("cmd")
-                    .args(["/C", script.get_command()])
-                    .current_dir(config.get_path())
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status();
+                let status: Result<std::process::ExitStatus, io::Error> = Command::new("cmd").args(
+                    ["/C", "start", format!("mvtool: {}", script.get_name()).as_str(), "cmd", "/K", script.get_command()]).current_dir(config.get_path()
+                ).status();
 
                 match status
                 {
