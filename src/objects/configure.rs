@@ -7,7 +7,6 @@ pub struct Configure
 {
     name: String,
     source_path: String,
-    prefix: String,
     selected: bool,
     clean_destination: bool,
     components: Vec<Component>,
@@ -16,9 +15,9 @@ pub struct Configure
 
 impl Configure
 {
-    pub fn new(name: String, source_path: String, prefix: String, selected: bool, clean_destination: bool, components: Vec<Component>, scripts: Vec<Script>) -> Self
+    pub fn new(name: String, source_path: String, selected: bool, clean_destination: bool, components: Vec<Component>, scripts: Vec<Script>) -> Self
     {
-        return Self { name, source_path, prefix, selected, clean_destination, components, scripts };
+        return Self { name, source_path, selected, clean_destination, components, scripts };
     }
 
     pub fn get_name(&self) -> &String
@@ -29,11 +28,6 @@ impl Configure
     pub fn get_path(&self) -> &String
     {
         return &self.source_path;
-    }
-
-    pub fn get_prefix(&self) -> &String
-    {
-        return &self.prefix;
     }
 
     pub fn is_selected(&self) -> bool

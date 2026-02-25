@@ -11,7 +11,7 @@ mod objects;
 mod utils;
 mod ui;
 
-use std::{ fs, io, collections::HashSet, process::{ Command } };
+use std::{ fs, io, process::{ Command } };
 use crossterm::event::{ self, Event, KeyCode, KeyEventKind };
 use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Rect }, style::{ Color, Style, Stylize, Modifier }, text::{ Line, Span }, widgets::{ Block, Paragraph, Widget, Padding }, DefaultTerminal, Frame };
 use serde_json::Value;
@@ -39,7 +39,6 @@ enum ActiveArea
 pub struct App
 {
     projects: Vec<Project>,
-    prefix_exceptions: HashSet<String>,
     extension_mask: Vec<String>,
     selected_project: usize,
     selected_configure: usize,
@@ -63,8 +62,6 @@ impl App
             return;
         }
 
-        self.prefix_exceptions = json["prefix_exceptions"].as_array().unwrap_or(&vec![]).iter().filter_map(|v: &Value| v.as_str()).map(|s: &str| s.to_string()).collect();
-
         self.extension_mask = json["extension_mask"].as_array().unwrap_or(&vec![]).iter().filter_map(|v| v.as_str()).map(|s| s.replace("*.", "")) .collect();
 
         for projects in json["projects"].as_array().unwrap_or(&vec![])
@@ -87,7 +84,6 @@ impl App
                 configures.push(Configure::new(
                     configure["name"].as_str().unwrap_or_default().to_string(),
                     configure["source_path"].as_str().unwrap_or_default().to_string(),
-                    configure["prefix"].as_str().unwrap_or_default().to_string(),
                     configure["selected"].as_bool().unwrap_or(false),
                     configure["clean_destination"].as_bool().unwrap_or(false),
                     components, scripts,
@@ -305,17 +301,17 @@ impl App
             }
             let dest_path = project.get_destination();
             
-            for config in project.get_configures()
+            for configure in project.get_configures()
             {
-                if !config.is_selected()
+                if !configure.is_selected()
                 {
                     continue;
                 }
 
-                let src_path: &String = config.get_path();
-                let prefix: &String = config.get_prefix();
+                let src_path: &String = configure.get_path();
 
-                if config.should_clean() { 
+                if configure.should_clean()
+                { 
                     self.message_log.add_message("Cleaning components...".into(), MessageType::Info);
                     
                     if let Ok(entries) = fs::read_dir(dest_path)
@@ -330,12 +326,9 @@ impl App
                                 continue;
                             }
 
-                            for component in config.get_components()
+                            for component in configure.get_components()
                             {
-                                let is_exist: bool = self.prefix_exceptions.contains(component.get_name());
-                                let pattern: String = Utils::get_search_pattern(component.get_name(), prefix, is_exist);
-                                
-                                if file_name.contains(&pattern)
+                                if Utils::is_match(&entry.path(), component.get_name(), &self.extension_mask)
                                 {
                                     let _ = fs::remove_file(entry.path());
                                     break; 
@@ -359,17 +352,14 @@ impl App
                             continue;
                         }
 
-                        for component in config.get_components()
+                        for component in configure.get_components()
                         {
                             if !component.is_selected()
                             {
                                 continue;
                             }
                             
-                            let is_exist: bool = self.prefix_exceptions.contains(component.get_name());
-                            let pattern: String = Utils::get_search_pattern(component.get_name(), prefix, is_exist);
-
-                            if file_name.contains(&pattern)
+                            if Utils::is_match(&entry.path(), component.get_name(), &self.extension_mask)
                             {
                                 let to: std::path::PathBuf = std::path::Path::new(dest_path).join(&file_name);
                                 if fs::copy(entry.path(), to).is_ok()
