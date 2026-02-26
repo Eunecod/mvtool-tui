@@ -17,7 +17,7 @@ use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Re
 use serde_json::Value;
 use ui::checkbox::layout::LayoutCheckboxGroup;
 use ui::checkbox::{ Checkbox, CheckboxState, HorizontalCheckboxGroup, VerticalCheckboxGroup, CheckboxGroupState };
-use ui::messagelog::{ MessageLog, MessageType };
+use ui::messagelog::{ MessageLog, MessageType, LogEvent };
 use objects::{ Project, Script, Configure };
 use utils::Utils;
 
@@ -35,7 +35,7 @@ enum ActiveArea
     Scripts,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct App
 {
     projects: Vec<Project>,
@@ -47,6 +47,25 @@ pub struct App
     active_area: ActiveArea,
     message_log: MessageLog,
     exit: bool,
+}
+
+impl Default for App
+{
+    fn default() -> Self
+    {
+        return Self
+        {
+            projects: Vec::new(),
+            extension_mask: Vec::new(),
+            selected_project: 0,
+            selected_configure: 0,
+            selected_component: 0,
+            selected_script: 0,
+            active_area: ActiveArea::Project,
+            message_log: MessageLog::new(),
+            exit: false
+        };
+    }
 }
 
 impl App
@@ -104,7 +123,13 @@ impl App
         while !self.exit
         {
             terminal.draw(|f: &mut Frame<'_>| self.draw(f))?;
-            self.handle_events()?;
+
+            self.message_log.update();
+
+            if event::poll(std::time::Duration::from_millis(16))?
+            {
+                self.handle_events()?;
+            }
         }
 
         return Ok(());
@@ -144,7 +169,6 @@ impl App
                     KeyCode::BackTab   => self.next_area(false),
                     KeyCode::F(1)      => self.ok(),
                     KeyCode::Esc       => self.exit = true,
-
                     _ => {}
                 }
             }
@@ -275,34 +299,65 @@ impl App
     {
         self.message_log.add_message("Starting...".into(), MessageType::Info);
         
-        for project in &self.projects
-        {
-            if !project.is_selected()
+        let projects: Vec<Project> = self.projects.clone();
+        let extension_mask: Vec<String> = self.extension_mask.clone();
+        let tx: std::sync::mpsc::Sender<ui::messagelog::LogEvent> = self.message_log.get_sender();
+
+        std::thread::spawn(move || {
+            for project in projects
             {
-                continue;
-            }
-            let dest_path = project.get_destination();
-            
-            for configure in project.get_configures()
-            {
-                if !configure.is_selected()
+                if !project.is_selected()
                 {
                     continue;
                 }
+                let dest_path: &String = project.get_destination();
 
-                let src_path: &String = configure.get_path();
+                for configure in project.get_configures()
+                {
+                    if !configure.is_selected()
+                    {
+                        continue;
+                    }
 
-                if configure.should_clean()
-                { 
-                    self.message_log.add_message("Cleaning components...".into(), MessageType::Info);
-                    
-                    if let Ok(entries) = fs::read_dir(dest_path)
+                    let src_path: &String = configure.get_path();
+
+                    if configure.should_clean()
+                    { 
+                        tx.send(LogEvent { message: "Cleaning components...".into(), message_type: MessageType::Info }).unwrap_or_default();
+
+                        if let Ok(entries) = fs::read_dir(dest_path)
+                        {
+                            for entry in entries.flatten()
+                            {
+                                let file_name: String = entry.file_name().to_string_lossy().to_string();
+
+                                let matches_mask: bool = extension_mask.is_empty() || extension_mask.iter().any(|ext: &String| file_name.ends_with(ext));
+                                if !matches_mask
+                                {
+                                    continue;
+                                }
+
+                                for component in configure.get_components()
+                                {
+                                    if Utils::is_match(&entry.path(), component.get_name(), &extension_mask)
+                                    {
+                                        let _ = fs::remove_file(entry.path());
+                                        break; 
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let mut copied_count: usize = 0;
+                    let mut copied_total: usize = 0;
+                    if let Ok(entries) = fs::read_dir(src_path)
                     {
                         for entry in entries.flatten()
                         {
                             let file_name: String = entry.file_name().to_string_lossy().to_string();
 
-                            let matches_mask: bool = self.extension_mask.is_empty() || self.extension_mask.iter().any(|ext| file_name.ends_with(ext));
+                            let matches_mask: bool = extension_mask.is_empty() || extension_mask.iter().any(|ext: &String| file_name.ends_with(ext));
                             if !matches_mask
                             {
                                 continue;
@@ -310,58 +365,33 @@ impl App
 
                             for component in configure.get_components()
                             {
-                                if Utils::is_match(&entry.path(), component.get_name(), &self.extension_mask)
+                                if !component.is_selected()
                                 {
-                                    let _ = fs::remove_file(entry.path());
-                                    break; 
+                                    continue;
+                                }
+
+                                if Utils::is_match(&entry.path(), component.get_name(), &extension_mask)
+                                {
+                                    let to: std::path::PathBuf = std::path::Path::new(dest_path).join(&file_name);
+                                    if fs::copy(entry.path(), to).is_ok()
+                                    {
+                                        copied_count += 1;
+                                        tx.send(LogEvent { message: format!("Processed copying {}: {}", copied_count, file_name), message_type: MessageType::Info }).unwrap_or_default();
+                                    }
+                                    copied_total += 1;
                                 }
                             }
                         }
-                    }
-                }
 
-                let mut copied_count: usize = 0;
-                let mut copied_total: usize = 0;
-                if let Ok(entries) = fs::read_dir(src_path)
-                {
-                    for entry in entries.flatten()
+                        tx.send(LogEvent { message: format!("Finished copying {}/{}: {}", copied_count, copied_total, dest_path), message_type: MessageType::Success }).unwrap_or_default();
+                    }
+                    else
                     {
-                        let file_name: String = entry.file_name().to_string_lossy().to_string();
-                        
-                        let matches_mask: bool = self.extension_mask.is_empty() || self.extension_mask.iter().any(|ext| file_name.ends_with(ext));
-                        if !matches_mask
-                        {
-                            continue;
-                        }
-
-                        for component in configure.get_components()
-                        {
-                            if !component.is_selected()
-                            {
-                                continue;
-                            }
-                            
-                            if Utils::is_match(&entry.path(), component.get_name(), &self.extension_mask)
-                            {
-                                let to: std::path::PathBuf = std::path::Path::new(dest_path).join(&file_name);
-                                if fs::copy(entry.path(), to).is_ok()
-                                {
-                                    copied_count += 1;
-                                    self.message_log.add_message(format!("Processed copying {}: {}", copied_count, file_name), MessageType::Success);
-                                }
-                                copied_total += 1;
-                            }
-                        }
+                        tx.send(LogEvent { message: format!("Failed to read source directory: {}", src_path), message_type: MessageType::Warning }).unwrap_or_default();
                     }
-
-                    self.message_log.add_message(format!("Finished copying {}/{}: {}", copied_count, copied_total, dest_path), MessageType::Success);
-                }
-                else
-                {
-                    self.message_log.add_message(format!("Failed to read source directory: {}", src_path), MessageType::Error);
                 }
             }
-        }
+        });
     }
 }
 

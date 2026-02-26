@@ -2,4 +2,4 @@
 
 pub mod messagelog;
 
-pub use messagelog::{MessageLog, MessageType};
+pub use messagelog::{MessageLog, MessageType, LogEvent};
