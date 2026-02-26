@@ -13,10 +13,10 @@ mod ui;
 
 use std::{ fs, io, process::{ Command } };
 use crossterm::event::{ self, Event, KeyCode, KeyEventKind };
-use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Rect }, style::{ Color, Style, Stylize, Modifier }, text::{ Line, Span }, widgets::{ Block, Paragraph, Widget, Padding }, DefaultTerminal, Frame };
+use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Rect }, style::{ Color, Style, Stylize }, text::{ Line }, widgets::{ Block, Paragraph, Widget, Padding, StatefulWidget }, DefaultTerminal, Frame };
 use serde_json::Value;
 use ui::checkbox::layout::LayoutCheckboxGroup;
-use ui::checkbox::{ Checkbox, CheckboxState, HorizontalCheckboxGroup, VerticalCheckboxGroup };
+use ui::checkbox::{ Checkbox, CheckboxState, HorizontalCheckboxGroup, VerticalCheckboxGroup, CheckboxGroupState };
 use ui::messagelog::{ MessageLog, MessageType };
 use objects::{ Project, Script, Configure };
 use utils::Utils;
@@ -44,7 +44,6 @@ pub struct App
     selected_configure: usize,
     selected_component: usize,
     selected_script: usize,
-    scroll_offsets: [usize; 4],
     active_area: ActiveArea,
     message_log: MessageLog,
     exit: bool,
@@ -167,7 +166,6 @@ impl App
                 }
 
                 self.selected_configure = (self.selected_configure as i32 + delta).clamp(0, len as i32 - 1) as usize;
-                self.upd_scroll(1, self.selected_configure, 3);
             }
             ActiveArea::Component =>
             {
@@ -178,7 +176,6 @@ impl App
                 }
 
                 self.selected_component = (self.selected_component as i32 + delta).clamp(0, len as i32 - 1) as usize;
-                self.upd_scroll(2, self.selected_component, 8);
             }
             ActiveArea::Scripts =>
             {
@@ -189,7 +186,6 @@ impl App
                 }
 
                 self.selected_script = (self.selected_script as i32 + delta).clamp(0, len as i32 - 1) as usize;
-                self.upd_scroll(3, self.selected_script, 5);
             }
 
             _ => {}
@@ -202,20 +198,6 @@ impl App
         {
             self.selected_project = (self.selected_project as i32 + delta).clamp(0, self.projects.len() as i32 - 1) as usize;
             self.selected_configure = 0;
-            self.scroll_offsets[1] = 0;
-        }
-    }
-
-    fn upd_scroll(&mut self, a_idx: usize, cur: usize, vis: usize)
-    {
-        let offset = &mut self.scroll_offsets[a_idx];
-        if cur < *offset
-        {
-            *offset = cur;
-        }
-        else if cur >= *offset + vis
-        {
-            *offset = cur - vis + 1;
         }
     }
 
@@ -389,7 +371,7 @@ impl Widget for &App
     {
         let [logo_area, project_area, middle_area, console_area] = Layout::vertical([
             Constraint::Length(1),
-            Constraint::Length(5),
+            Constraint::Length(6),
             Constraint::Min(1),
             Constraint::Length(3),
         ]).areas(area);
@@ -434,11 +416,11 @@ impl Widget for &App
         }
 
         // CONFIGURE LIST
-        let configure_block: Block<'_> = Block::bordered().title(" configure ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
+        let configure_block: Block<'_> = Block::bordered().title(" configure ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
         
         let configures: &Vec<Configure> = self.projects[self.selected_project].get_configures();
         let mut configure_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        for (i, configure) in configures.iter().enumerate().skip(self.scroll_offsets[1])
+        for (i, configure) in configures.iter().enumerate()
         {
             let mut state: CheckboxState = CheckboxState::new(configure.is_selected());
             if self.active_area == ActiveArea::Configure
@@ -459,11 +441,11 @@ impl Widget for &App
         }
 
         // COMPONENT LIST
-        let component_block: Block<'_> = Block::bordered().title(" components ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
+        let component_block: Block<'_> = Block::bordered().title(" components ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
 
         let components: &Vec<objects::Component> = configures[self.selected_configure].get_components();
         let mut component_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        for (i, component) in components.iter().enumerate().skip(self.scroll_offsets[2])
+        for (i, component) in components.iter().enumerate()
         {
             let mut state: CheckboxState = CheckboxState::new(component.is_selected());
             if self.active_area == ActiveArea::Component
@@ -485,23 +467,29 @@ impl Widget for &App
         }
 
         // SCRIPT LIST
-        let script_block: Block<'_> = Block::bordered().title(" scripts ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Scripts));
-        let script_inner: Rect = script_block.inner(script_area);
+        let script_block: Block<'_> = Block::bordered().title(" scripts ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Scripts)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
 
         let scripts: &Vec<Script> = configures[self.selected_configure].get_scripts();
-        for (i, s) in scripts.iter().enumerate().skip(self.scroll_offsets[3])
+        let mut script_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
+        for (i, script) in scripts.iter().enumerate()
         {
-            let y = script_inner.y + 1 + (i - self.scroll_offsets[3]) as u16; 
-            if y >= script_inner.bottom().saturating_sub(1)
+            let mut state: CheckboxState = CheckboxState::new(false);
+            if self.active_area == ActiveArea::Scripts
             {
-                break;
+                state.focus();
+                if i == self.selected_script
+                {
+                    state.highlight();
+                }
             }
 
-            let is_select: bool = i == self.selected_script && self.active_area == ActiveArea::Scripts;
-            let style: Style = if is_select { Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD) } else { Style::default().fg(Color::DarkGray) };
-            let line: Line<'_> = Line::from(vec![Span::styled(" > ", style), Span::styled(s.get_name(), style)]);
-
-            buf.set_line(script_inner.x + 1, y, &line, script_inner.width.saturating_sub(2));
+            script_group.add_checkbox(
+                {
+                    let mut checkbox: Checkbox<'_> = Checkbox::new(script.get_name());
+                    checkbox.set_state(state);
+                    checkbox
+                }
+            );
         }
 
         // CONSOLE
@@ -512,19 +500,20 @@ impl Widget for &App
         logo_block.render(logo_area, buf);
 
         // RENDER SUBLAYOUT 0
-        project_group.render(project_block.inner(project_area), buf);
+        project_group.render(project_block.inner(project_area), buf, &mut CheckboxGroupState { cursor: self.selected_project, scroll_offset: 0 });
         project_block.render(project_area, buf);
 
         // RENDER SUBLAYOUT 1
-        component_group.render(component_block.inner(component_area), buf);
+        component_group.render(component_block.inner(component_area), buf, &mut CheckboxGroupState { cursor: self.selected_component, scroll_offset: 0 });
         component_block.render(component_area, buf);
 
         // RENDER SUBLAYOUT 2
-        configure_group.render(configure_block.inner(configure_area), buf);
+        configure_group.render(configure_block.inner(configure_area), buf, &mut CheckboxGroupState { cursor: self.selected_configure, scroll_offset: 0 });
         configure_block.render(configure_area, buf);
 
         // RENDER SUBLAYOUT 3
-        script_block.render(script_area, buf); 
+        script_group.render(script_block.inner(script_area), buf, &mut CheckboxGroupState { cursor: self.selected_script, scroll_offset: 0 });
+        script_block.render(script_area, buf);
 
         // RENDER MAINLAYOUT 1
         console.render(console_area, buf);
