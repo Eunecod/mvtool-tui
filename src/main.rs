@@ -13,7 +13,7 @@ mod ui;
 
 use std::{ fs, io, process::{ Command } };
 use crossterm::event::{ self, Event, KeyCode, KeyEventKind };
-use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Rect }, style::{ Color, Style, Stylize }, text::{ Line }, widgets::{ Block, Paragraph, Widget, Padding, StatefulWidget }, DefaultTerminal, Frame };
+use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Rect }, style::{ Color, Style, Stylize, Modifier }, text::{ Line }, widgets::{ Block, Paragraph, Widget, Padding, StatefulWidget }, DefaultTerminal, Frame };
 use serde_json::Value;
 use ui::checkbox::layout::LayoutCheckboxGroup;
 use ui::checkbox::{ Checkbox, CheckboxState, HorizontalCheckboxGroup, VerticalCheckboxGroup, CheckboxGroupState };
@@ -474,11 +474,15 @@ impl Widget for &App
         for (i, script) in scripts.iter().enumerate()
         {
             let mut state: CheckboxState = CheckboxState::new(false);
+            state.data.symbols = Some(("", ">"));
+            state.data.style_highlighted = Some(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+
             if self.active_area == ActiveArea::Scripts
             {
                 state.focus();
                 if i == self.selected_script
                 {
+                    state.data.is_selected = true;
                     state.highlight();
                 }
             }
