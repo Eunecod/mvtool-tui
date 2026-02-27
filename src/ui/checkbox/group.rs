@@ -41,12 +41,12 @@ impl<'a> StatefulWidget for HorizontalCheckboxGroup<'a>
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State)
     {
         let total_items: usize = self.0.checkboxes.len();
-        let visible_count: usize = area.width as usize / total_items;
-
         if total_items == 0
         {
             return;
         }
+
+        let visible_count: usize = area.width as usize / total_items;
 
         if state.cursor >= state.scroll_offset + visible_count
         {

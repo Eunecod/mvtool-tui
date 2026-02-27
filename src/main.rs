@@ -11,7 +11,7 @@ mod objects;
 mod utils;
 mod ui;
 
-use std::{ fs, io, process::{ Command } };
+use std::{ fs, io, process::Command };
 use crossterm::event::{ self, Event, KeyCode, KeyEventKind };
 use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Rect }, style::{ Color, Style, Stylize, Modifier }, text::{ Line }, widgets::{ Block, Paragraph, Widget, Padding, StatefulWidget }, DefaultTerminal, Frame };
 use serde_json::Value;
@@ -416,118 +416,122 @@ impl Widget for &App
         let logo_block: Paragraph<'_> = Paragraph::new(logo_lines).alignment(ratatui::layout::Alignment::Center);
 
         // PROJECT LIST
+        let mut project_group: HorizontalCheckboxGroup<'_> = HorizontalCheckboxGroup::new();
         let project_block: Block<'_> = Block::bordered().title(" projects ".bold()).border_set(border::THICK).border_style(self.area_style(ActiveArea::Project)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
 
-        let mut project_group: HorizontalCheckboxGroup<'_> = HorizontalCheckboxGroup::new();
-        for (i, p) in self.projects.iter().enumerate()
-        {
-            let mut state: CheckboxState = CheckboxState::new(p.is_selected());
-            if self.active_area == ActiveArea::Project
-            {
-                state.focus();
-                if i == self.selected_project
-                {
-                    state.highlight();
-                }
-            }  
-
-            project_group.add_checkbox(
-                {
-                    let mut checkbox: Checkbox<'_> = Checkbox::new(p.get_name());
-                    checkbox.set_state(state);
-                    checkbox
-                }
-            );
-        }
-
-        if self.projects.is_empty()
-        {
-            return;
-        }
-
         // CONFIGURE LIST
-        let configure_block: Block<'_> = Block::bordered().title(" configure ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
-        
-        let configures: &Vec<Configure> = self.projects[self.selected_project].get_configures();
         let mut configure_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        for (i, configure) in configures.iter().enumerate()
-        {
-            let mut state: CheckboxState = CheckboxState::new(configure.is_selected());
-            if self.active_area == ActiveArea::Configure
-            {
-                state.focus(); if i == self.selected_configure
-                {
-                    state.highlight();
-                }
-            }
-
-            configure_group.add_checkbox(
-                {
-                    let mut checkbox: Checkbox<'_> = Checkbox::new(configure.get_name());
-                    checkbox.set_state(state);
-                    checkbox
-                }
-            );
-        }
+        let configure_block: Block<'_> = Block::bordered().title(" configure ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
 
         // COMPONENT LIST
-        let component_block: Block<'_> = Block::bordered().title(" components ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
-
-        let components: &Vec<objects::Component> = configures[self.selected_configure].get_components();
         let mut component_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        for (i, component) in components.iter().enumerate()
-        {
-            let mut state: CheckboxState = CheckboxState::new(component.is_selected());
-            if self.active_area == ActiveArea::Component
-            {
-                state.focus();
-                if i == self.selected_component
-                {
-                    state.highlight();
-                }
-            }
-
-            component_group.add_checkbox(
-                {
-                    let mut checkbox: Checkbox<'_> = Checkbox::new(component.get_name());
-                    checkbox.set_state(state);
-                    checkbox
-                }
-            );
-        }
-
+        let component_block: Block<'_> = Block::bordered().title(" components ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
+        
         // SCRIPT LIST
-        let script_block: Block<'_> = Block::bordered().title(" scripts ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Scripts)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
-
-        let scripts: &Vec<Script> = configures[self.selected_configure].get_scripts();
         let mut script_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        for (i, script) in scripts.iter().enumerate()
-        {
-            let mut state: CheckboxState = CheckboxState::new(false);
-            state.data.symbols = Some(("", ">"));
-            state.data.style_highlighted = Some(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
-
-            if self.active_area == ActiveArea::Scripts
-            {
-                state.focus();
-                if i == self.selected_script
-                {
-                    state.data.is_selected = true;
-                    state.highlight();
-                }
-            }
-
-            script_group.add_checkbox(
-                {
-                    let mut checkbox: Checkbox<'_> = Checkbox::new(script.get_name());
-                    checkbox.set_state(state);
-                    checkbox
-                }
-            );
-        }
+        let script_block: Block<'_> = Block::bordered().title(" scripts ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Scripts)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
 
         // CONSOLE
         let console_block: Block<'_> = Block::bordered().title(" console ").border_set(border::THICK).padding(Padding { left: 1, right: 0, top: 0, bottom: 0 });
+
+        if !self.projects.is_empty()
+        {
+            // PROJECT LIST
+            for (i, p) in self.projects.iter().enumerate()
+            {
+                let mut state: CheckboxState = CheckboxState::new(p.is_selected());
+                if self.active_area == ActiveArea::Project
+                {
+                    state.focus();
+                    if i == self.selected_project
+                    {
+                        state.highlight();
+                    }
+                }  
+
+                project_group.add_checkbox(
+                    {
+                        let mut checkbox: Checkbox<'_> = Checkbox::new(p.get_name());
+                        checkbox.set_state(state);
+                        checkbox
+                    }
+                );
+            }
+
+            // CONFIGURE LIST
+            let configures: &Vec<Configure> = self.projects[self.selected_project].get_configures();
+            for (i, configure) in configures.iter().enumerate()
+            {
+                let mut state: CheckboxState = CheckboxState::new(configure.is_selected());
+                if self.active_area == ActiveArea::Configure
+                {
+                    state.focus(); if i == self.selected_configure
+                    {
+                        state.highlight();
+                    }
+                }
+
+                configure_group.add_checkbox(
+                    {
+                        let mut checkbox: Checkbox<'_> = Checkbox::new(configure.get_name());
+                        checkbox.set_state(state);
+                        checkbox
+                    }
+                );
+            }
+
+            // COMPONENT LIST
+            let components: &Vec<objects::Component> = configures[self.selected_configure].get_components();
+            for (i, component) in components.iter().enumerate()
+            {
+                let mut state: CheckboxState = CheckboxState::new(component.is_selected());
+                if self.active_area == ActiveArea::Component
+                {
+                    state.focus();
+                    if i == self.selected_component
+                    {
+                        state.highlight();
+                    }
+                }
+
+                component_group.add_checkbox(
+                    {
+                        let mut checkbox: Checkbox<'_> = Checkbox::new(component.get_name());
+                        checkbox.set_state(state);
+                        checkbox
+                    }
+                );
+            }
+
+            // SCRIPT LIST
+            let scripts: &Vec<Script> = configures[self.selected_configure].get_scripts();
+            for (i, script) in scripts.iter().enumerate()
+            {
+                let mut state: CheckboxState = CheckboxState::new(false);
+                state.data.symbols = Some(("", ">"));
+                state.data.style_highlighted = Some(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+
+                if self.active_area == ActiveArea::Scripts
+                {
+                    state.focus();
+                    if i == self.selected_script
+                    {
+                        state.data.is_selected = true;
+                        state.highlight();
+                    }
+                }
+
+                script_group.add_checkbox(
+                    {
+                        let mut checkbox: Checkbox<'_> = Checkbox::new(script.get_name());
+                        checkbox.set_state(state);
+                        checkbox
+                    }
+                );
+            }
+        }
+
+        // CONSOLE
         let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
         
         // RENDER MAINLAYOUT 0

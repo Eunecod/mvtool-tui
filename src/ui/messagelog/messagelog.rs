@@ -19,6 +19,14 @@ pub struct LogEvent
     pub message_type: MessageType,
 }
 
+impl Default for LogEvent
+{
+    fn default() -> Self
+    {
+        return Self { message: "Unregistered message".into(), message_type: MessageType::Warning };
+    }
+}
+
 #[derive(Debug)]
 pub struct MessageLog
 {
