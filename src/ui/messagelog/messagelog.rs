@@ -23,7 +23,7 @@ impl Default for LogEvent
 {
     fn default() -> Self
     {
-        return Self { message: "Unregistered message".into(), message_type: MessageType::Warning };
+        return Self { message: "unregistered message".into(), message_type: MessageType::Warning };
     }
 }
 

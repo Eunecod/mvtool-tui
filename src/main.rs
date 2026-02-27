@@ -76,7 +76,7 @@ impl App
         let json: Value = serde_json::from_str(&content).unwrap_or(Value::Null);
         if json.is_null()
         {
-            self.message_log.add_message("Failed to load setting.json".into(), MessageType::Error);
+            self.message_log.add_message("failed to load setting.json".into(), MessageType::Error);
             return;
         }
 
@@ -114,7 +114,7 @@ impl App
             ));
         }
 
-        self.message_log.add_message("Initialized 'mvtool' go working! ;)".into(), MessageType::Success);
+        self.message_log.add_message("initialized 'mvtool'".into(), MessageType::Success);
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()>
@@ -273,7 +273,7 @@ impl App
                 let script: &Script = &self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts()[self.selected_script];
                 let config: &Configure = &self.projects[self.selected_project].get_configures()[self.selected_configure];
 
-                self.message_log.add_message(format!("Running: {}", script.get_name()), MessageType::Info);
+                self.message_log.add_message(format!("running: {}", script.get_name()), MessageType::Info);
 
                 let status: Result<std::process::ExitStatus, io::Error> = Command::new("cmd").args(
                     ["/C", "start", format!("mvtool: {}", script.get_name()).as_str(), "cmd", "/K", script.get_command()]).current_dir(config.get_path()
@@ -284,11 +284,11 @@ impl App
                     Ok(stat)
                     if stat.success() =>
                     {
-                        self.message_log.add_message(format!("Success: {}", script.get_name()), MessageType::Success);
+                        self.message_log.add_message(format!("executed script: {}", script.get_name()), MessageType::Success);
                     }
                     _ =>
                     {
-                        self.message_log.add_message(format!("Failed to run or script error: {}", script.get_name()), MessageType::Error);
+                        self.message_log.add_message(format!("failed to run or script error: {}", script.get_name()), MessageType::Error);
                     }
                 }
             }
@@ -297,7 +297,7 @@ impl App
 
     fn ok(&mut self)
     {
-        self.message_log.add_message("Starting...".into(), MessageType::Info);
+        self.message_log.add_message("starting...".into(), MessageType::Info);
         
         let projects: Vec<Project> = self.projects.clone();
         let extension_mask: Vec<String> = self.extension_mask.clone();
@@ -323,7 +323,7 @@ impl App
 
                     if configure.should_clean()
                     { 
-                        tx.send(LogEvent { message: "Cleaning components...".into(), message_type: MessageType::Info }).unwrap_or_default();
+                        tx.send(LogEvent { message: "cleaning components...".into(), message_type: MessageType::Info }).unwrap_or_default();
 
                         if let Ok(entries) = fs::read_dir(dest_path)
                         {
@@ -376,18 +376,18 @@ impl App
                                     if fs::copy(entry.path(), to).is_ok()
                                     {
                                         copied_count += 1;
-                                        tx.send(LogEvent { message: format!("Processed copying {}: {}", copied_count, file_name), message_type: MessageType::Info }).unwrap_or_default();
+                                        tx.send(LogEvent { message: format!("processed copying {}: {}", copied_count, file_name), message_type: MessageType::Info }).unwrap_or_default();
                                     }
                                     copied_total += 1;
                                 }
                             }
                         }
 
-                        tx.send(LogEvent { message: format!("Finished copying {}/{}: {}", copied_count, copied_total, dest_path), message_type: MessageType::Success }).unwrap_or_default();
+                        tx.send(LogEvent { message: format!("finished copying {}/{}: {}", copied_count, copied_total, dest_path), message_type: MessageType::Success }).unwrap_or_default();
                     }
                     else
                     {
-                        tx.send(LogEvent { message: format!("Failed to read source directory: {}", src_path), message_type: MessageType::Warning }).unwrap_or_default();
+                        tx.send(LogEvent { message: format!("failed to read source directory: {}", src_path), message_type: MessageType::Warning }).unwrap_or_default();
                     }
                 }
             }
