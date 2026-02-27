@@ -352,13 +352,13 @@ impl App
 
     fn ok(&mut self)
     {
-        self.message_log.add_message("starting...".into(), MessageType::Info);
-        
         let projects: Vec<Project> = self.projects.clone();
         let extension_mask: Vec<String> = self.extension_mask.clone();
         let tx: std::sync::mpsc::Sender<ui::messagelog::LogEvent> = self.message_log.get_sender();
 
+        self.message_log.add_message("starting...".into(), MessageType::Info);
         std::thread::spawn(move || {
+            let mut fallback: bool = true;
             for project in projects
             {
                 if !project.is_selected()
@@ -373,8 +373,9 @@ impl App
                     {
                         continue;
                     }
-
                     let src_path: &String = configure.get_path();
+
+                    fallback = false;
 
                     if configure.should_clean()
                     { 
@@ -445,6 +446,11 @@ impl App
                         tx.send(LogEvent { message: format!("failed to read source directory: {}", src_path), message_type: MessageType::Warning }).unwrap_or_default();
                     }
                 }
+            }
+
+            if fallback
+            {
+                tx.send(LogEvent { message: "no project or configure selected, nothing was done".into(), message_type: MessageType::Warning }).unwrap_or_default();
             }
         });
     }
