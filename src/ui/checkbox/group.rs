@@ -70,7 +70,7 @@ impl<'a> StatefulWidget for HorizontalCheckboxGroup<'a>
             x += width.saturating_add(1) ;
         }
 
-        let scrollbar: Scrollbar<'_> = Scrollbar::new(ScrollbarOrientation::HorizontalBottom).begin_symbol(Some("◄")).end_symbol(Some("►")).track_symbol(Some("─")).thumb_symbol("▬");
+        let scrollbar: Scrollbar<'_> = Scrollbar::new(ScrollbarOrientation::HorizontalBottom).begin_symbol(Some("┠")).end_symbol(Some("┨")).track_symbol(Some("─")).thumb_symbol("═");
         StatefulWidget::render(scrollbar, area, buf, &mut ScrollbarState::new(total_items).position(state.cursor).viewport_content_length(visible_count));
     }
 }
@@ -127,7 +127,7 @@ impl<'a> StatefulWidget for VerticalCheckboxGroup<'a>
             Widget::render(checkbox, Rect::new(area.x, y, area.width.saturating_sub(1), 1), buf);
         }
 
-        let scrollbar: Scrollbar<'_> = Scrollbar::new(ScrollbarOrientation::VerticalRight).begin_symbol(Some("▲")).end_symbol(Some("▼")).track_symbol(Some("│")).thumb_symbol("█");
+        let scrollbar: Scrollbar<'_> = Scrollbar::new(ScrollbarOrientation::VerticalRight).begin_symbol(Some("┯")).end_symbol(Some("┷")).track_symbol(Some("│")).thumb_symbol("║");
         StatefulWidget::render(scrollbar, area, buf, &mut ScrollbarState::new(total_items).position(state.cursor).viewport_content_length(height));
     }
 }

@@ -569,7 +569,7 @@ impl Widget for &App
             for (i, script) in scripts.iter().enumerate()
             {
                 let mut state: CheckboxState = CheckboxState::new(false);
-                state.data.symbols = Some(("", ">"));
+                state.data.symbols = Some(("", "➔ "));
                 state.data.style_highlighted = Some(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
 
                 if self.active_area == ActiveArea::Scripts

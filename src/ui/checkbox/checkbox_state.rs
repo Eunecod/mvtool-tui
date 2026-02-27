@@ -53,7 +53,7 @@ impl CheckboxState
             style = style.fg(Color::DarkGray);
         }
     
-        let (unchecked, checked) = self.data.symbols.unwrap_or(("[ ]", "[x]"));
+        let (unchecked, checked) = self.data.symbols.unwrap_or(("[ ]", "[■]"));
         buf.set_string(area.x, area.y, format!("{} {}", if self.data.is_selected { checked } else { unchecked }, name), style);
     }
 }
