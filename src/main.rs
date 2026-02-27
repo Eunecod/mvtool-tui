@@ -225,8 +225,48 @@ impl App
         }
     }
 
+    fn get_selected_current_project(&self) -> usize
+    {
+        for (i, project) in self.projects.iter().enumerate()
+        {
+            if project.is_selected()
+            {
+                return i;
+            }
+        }
+
+        return 0 as usize;
+    }
+
+    fn get_selected_current_configure(&self) -> usize
+    {
+        for (i, configure) in self.projects[self.selected_project].get_configures().iter().enumerate()
+        {
+            if configure.is_selected()
+            {
+                return i;
+            }
+        }
+
+        return 0 as usize;
+    }
+
     fn next_area(&mut self, forward: bool)
     {
+        match self.active_area
+        {
+            ActiveArea::Project =>
+            {
+                self.selected_project = self.get_selected_current_project();
+            }
+            ActiveArea::Configure =>
+            {
+                self.selected_configure = self.get_selected_current_configure();
+            }
+
+            _ => {}
+        }
+
         self.active_area = match (self.active_area, forward)
         {
             (ActiveArea::Project, true)    => ActiveArea::Configure,
