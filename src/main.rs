@@ -242,21 +242,26 @@ impl App
 
     fn on_action(&mut self)
     {
-        if self.projects.is_empty()
-        {
-            return;
-        }
-
         match self.active_area
         {
             ActiveArea::Project =>
             {
+                if self.projects.is_empty()
+                {
+                    return;
+                }
+
                 let selected: bool = self.projects[self.selected_project].is_selected();
                 self.projects.iter_mut().for_each(|p: &mut Project| p.set_selected(false));
                 self.projects[self.selected_project].set_selected(!selected);
             }
             ActiveArea::Configure =>
             {
+                if self.projects[self.selected_project].get_configures().is_empty()
+                {
+                    return;
+                }
+
                 let project: &mut Project = &mut self.projects[self.selected_project];
                 let selected: bool = project.get_configures()[self.selected_configure].is_selected();
 
@@ -265,11 +270,21 @@ impl App
             }
             ActiveArea::Component =>
             {
+                if self.projects[self.selected_project].get_configures()[self.selected_configure].get_components().is_empty()
+                {
+                    return;
+                }
+
                 let component: &mut objects::Component = &mut self.projects[self.selected_project].get_configures_mut()[self.selected_configure].get_components_mut()[self.selected_component];
                 component.set_selected(!component.is_selected());
             }
             ActiveArea::Scripts =>
             {
+                if self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts().is_empty()
+                {
+                    return;
+                }
+
                 let script: &Script = &self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts()[self.selected_script];
                 let config: &Configure = &self.projects[self.selected_project].get_configures()[self.selected_configure];
 
@@ -330,7 +345,7 @@ impl App
                             for entry in entries.flatten()
                             {
                                 let file_name: String = entry.file_name().to_string_lossy().to_string();
-
+                                
                                 let matches_mask: bool = extension_mask.is_empty() || extension_mask.iter().any(|ext: &String| file_name.ends_with(ext));
                                 if !matches_mask
                                 {
@@ -407,7 +422,7 @@ impl Widget for &App
         ]).areas(area);
 
         let [side_area, component_area] = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(middle_area);
-        let [configure_area, script_area] = Layout::vertical([Constraint::Percentage(40), Constraint::Percentage(60)]).areas(side_area);
+        let [configure_area, script_area] = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(side_area);
 
         // LOGO
         let logo_lines: Vec<Line<'_>> = vec![
