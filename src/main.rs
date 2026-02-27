@@ -403,7 +403,7 @@ impl Widget for &App
             Constraint::Length(1),
             Constraint::Length(6),
             Constraint::Min(1),
-            Constraint::Length(3),
+            Constraint::Length(5),
         ]).areas(area);
 
         let [side_area, component_area] = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(middle_area);
@@ -417,22 +417,22 @@ impl Widget for &App
 
         // PROJECT LIST
         let mut project_group: HorizontalCheckboxGroup<'_> = HorizontalCheckboxGroup::new();
-        let project_block: Block<'_> = Block::bordered().title(" projects ".bold()).border_set(border::THICK).border_style(self.area_style(ActiveArea::Project)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
+        let project_block: Block<'_> = Block::bordered().title("[ projects ]".bold()).border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Project)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
 
         // CONFIGURE LIST
         let mut configure_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        let configure_block: Block<'_> = Block::bordered().title(" configure ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
+        let configure_block: Block<'_> = Block::bordered().title("[ configure ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
 
         // COMPONENT LIST
         let mut component_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        let component_block: Block<'_> = Block::bordered().title(" components ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
+        let component_block: Block<'_> = Block::bordered().title("[ components ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
         
         // SCRIPT LIST
         let mut script_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        let script_block: Block<'_> = Block::bordered().title(" scripts ").border_set(border::THICK).border_style(self.area_style(ActiveArea::Scripts)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
+        let script_block: Block<'_> = Block::bordered().title("[ scripts ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Scripts)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
 
         // CONSOLE
-        let console_block: Block<'_> = Block::bordered().title(" console ").border_set(border::THICK).padding(Padding { left: 1, right: 0, top: 0, bottom: 0 });
+        let console_block: Block<'_> = Block::bordered().title("[ console ]").border_set(border::ROUNDED).padding(Padding { left: 1, right: 0, top: 1, bottom: 1 });
 
         if !self.projects.is_empty()
         {
