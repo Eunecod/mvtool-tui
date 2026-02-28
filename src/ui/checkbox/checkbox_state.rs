@@ -2,12 +2,14 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{ Color, Style, Modifier};
+use ratatui::style::{ Color, Style, Modifier };
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CheckboxStateData
 {
-    pub is_selected: bool,
+    pub style_highlighted: Option<Style>,
+    pub symbols: Option<(&'static str, &'static str)>,
+    pub is_selected: bool,  
     pub is_focused: bool,
     pub is_highlighted: bool,
 }
@@ -37,12 +39,10 @@ impl CheckboxState
 
     pub fn render(&self, area: Rect, buf: &mut Buffer, name: &str)
     {
-        let symbol: &str = if self.data.is_selected { "[x] " } else { "[ ] " };
         let mut style: Style = Style::default();
-        
         if self.data.is_highlighted
         {
-            style = style.fg(Color::Green).add_modifier(Modifier::BOLD);
+            style = self.data.style_highlighted.unwrap_or_else(|| Style::default().fg(Color::Green).add_modifier(Modifier::BOLD));
         }
         else if self.data.is_focused
         {
@@ -53,6 +53,7 @@ impl CheckboxState
             style = style.fg(Color::DarkGray);
         }
     
-        buf.set_string(area.x, area.y, format!("{}{}", symbol, name), style);
+        let (unchecked, checked) = self.data.symbols.unwrap_or(("[ ]", "[■]"));
+        buf.set_string(area.x, area.y, format!("{} {}", if self.data.is_selected { checked } else { unchecked }, name), style);
     }
 }

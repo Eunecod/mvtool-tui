@@ -1,6 +1,7 @@
 // src/ui/messagelog/messagelog.rs
 
-use ratatui::{ style::{ Color, Style }, text::Text, widgets::Paragraph };
+use ratatui::{ style::{ Color, Style }, widgets::Paragraph };
+use std::sync::mpsc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum MessageType
@@ -12,49 +13,79 @@ pub enum MessageType
     Info,
 }
 
-#[derive(Debug, Default)]
+pub struct LogEvent
+{
+    pub message: String,
+    pub message_type: MessageType,
+}
+
+impl Default for LogEvent
+{
+    fn default() -> Self
+    {
+        return Self { message: "unregistered message".into(), message_type: MessageType::Warning };
+    }
+}
+
+#[derive(Debug)]
 pub struct MessageLog
 {
     message: String,
-    style: Style,
+    message_type: MessageType,
+    sender: mpsc::Sender<LogEvent>,
+    receiver: mpsc::Receiver<LogEvent>
 }
 
 impl MessageLog
-{
+{   
+    pub fn new() -> Self
+    {
+        let (sender, receiver) = mpsc::channel();
+        return Self { message: String::new(), message_type: MessageType::Info, sender, receiver };
+    }
+
+    pub fn update(&mut self)
+    {
+        while let Ok(event) = self.receiver.try_recv()
+        {
+            self.add_message(event.message, event.message_type);
+        }
+    }
 
     pub fn add_message(&mut self, message: String, message_type: MessageType)
     {
-        let prefix: String;
-        match message_type
-        {
-            MessageType::Warning =>
-            {
-                self.style = Style::default().fg(Color::Yellow).bold();
-                prefix = "[Waring]:".to_string();
-            }
-            MessageType::Success =>
-            {
-                self.style = Style::default().fg(Color::Green).bold();
-                prefix = "[Success]:".to_string();
-            }
-            MessageType::Error =>
-            {
-                self.style = Style::default().fg(Color::Red).bold();
-                prefix = "[Error]:".to_string();
-            }
-            MessageType::Info =>
-            {
-                self.style = Style::default().fg(Color::LightCyan).bold();
-                prefix = "[Info]:".to_string();
-            }
-        };
-
-        self.message = format!("{} {}", prefix, message);
+        self.message_type = message_type;
+        self.message = message;
     }
 
     pub fn get_message(&self) -> Paragraph
     {
-        return Paragraph::new(Text::from(self.message.clone())).style(self.style);
+        let (style, prefix) = match self.message_type
+        {
+            MessageType::Warning =>
+            {
+                (Style::default().fg(Color::Yellow).bold(), "[warning]:".to_string())
+            }
+            MessageType::Success =>
+            {
+                (Style::default().fg(Color::Green).bold(), "[success]:".to_string())
+            }
+            MessageType::Error =>
+            {
+                (Style::default().fg(Color::Red).bold(), "[error]:".to_string())
+            }
+            MessageType::Info =>
+            {
+                (Style::default().fg(Color::LightBlue).bold(), "[info]:".to_string())
+            }
+        };
+        
+        return Paragraph::new(format!("{} {}", prefix, self.message)).style(style);
+    }
+
+    pub fn get_sender(&self) -> mpsc::Sender<LogEvent>
+    {
+        self.sender.clone()
     }
 
 }

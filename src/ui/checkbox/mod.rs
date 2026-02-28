@@ -7,4 +7,4 @@ pub mod layout;
 
 pub use checkbox::Checkbox;
 pub use checkbox_state::CheckboxState;
-pub use group::{ HorizontalCheckboxGroup, VerticalCheckboxGroup };
+pub use group::{ HorizontalCheckboxGroup, VerticalCheckboxGroup, CheckboxGroupState };

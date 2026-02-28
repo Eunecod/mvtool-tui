@@ -1,5 +1,5 @@
-// src/ui/mod.rs
+// src/ui/messagelog/mod.rs
 
 pub mod messagelog;
 
-pub use messagelog::{MessageLog, MessageType};
+pub use messagelog::{MessageLog, MessageType, LogEvent};
