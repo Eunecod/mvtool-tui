@@ -1,7 +1,7 @@
 // src/main.rs
 
 //   /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$  | 
-//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v1.1.3
+//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v1.2.0
 // | $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$ | 30/01/2025
 // | $$  | $$| $$  | $$|  $$$$$$/| $$  | $$ | 
 // |__/  |__/|__/  |__/ \____ $$$|__/  |__/ | Лецензии нет делай все что хочешь форкай не форкай копипасти ломай строй и т.д. :)
@@ -40,7 +40,6 @@ enum ActiveArea
 pub struct App
 {
     projects: Vec<Project>,
-    extension_mask: Vec<String>,
     selected_project: usize,
     selected_configure: usize,
     selected_component: usize,
@@ -58,7 +57,6 @@ impl Default for App
         return Self
         {
             projects: Vec::new(),
-            extension_mask: Vec::new(),
             selected_project: 0,
             selected_configure: 0,
             selected_component: 0,
@@ -83,13 +81,13 @@ impl App
             return;
         }
 
-        self.extension_mask = json["extension_mask"].as_array().unwrap_or(&vec![]).iter().filter_map(|v| v.as_str()).map(|s| s.replace("*.", "")) .collect();
-
         for projects in json["projects"].as_array().unwrap_or(&vec![])
         {
             let mut configures: Vec<Configure> = Vec::new();
             for configure in projects["configures"].as_array().unwrap_or(&vec![])
             {
+                let extension_mask: Vec<String> = configure["extension_mask"].as_array().unwrap_or(&vec![]).iter().filter_map(|v| v.as_str()).map(|s| s.replace("*.", "")) .collect();
+
                 let components: Vec<objects::Component> = configure["components"].as_array().unwrap_or(&vec![]).iter().map(|component: &Value|
                     {
                         objects::Component::new(component["name"].as_str().unwrap_or_default().to_string(), component["selected"].as_bool().unwrap_or(false))
@@ -107,13 +105,17 @@ impl App
                     configure["source_path"].as_str().unwrap_or_default().to_string(),
                     configure["selected"].as_bool().unwrap_or(false),
                     configure["clean_destination"].as_bool().unwrap_or(false),
-                    components, scripts,
+                    extension_mask,
+                    components,
+                    scripts
                 ));
             }
+
             self.projects.push(Project::new(
                 projects["name"].as_str().unwrap_or_default().to_string(),
                 projects["destination_path"].as_str().unwrap_or_default().to_string(),
-                configures, projects["selected"].as_bool().unwrap_or(false),
+                configures, 
+                projects["selected"].as_bool().unwrap_or(false),
             ));
         }
 
@@ -357,7 +359,6 @@ impl App
     fn ok(&mut self)
     {
         let projects: Vec<Project> = self.projects.clone();
-        let extension_mask: Vec<String> = self.extension_mask.clone();
         let tx: std::sync::mpsc::Sender<ui::messagelog::LogEvent> = self.message_log.get_sender();
 
         self.message_log.add_message("starting...".into(), MessageType::Info);
@@ -395,7 +396,7 @@ impl App
                             {
                                 let file_name: String = entry.file_name().to_string_lossy().to_string();
                                 
-                                let matches_mask: bool = extension_mask.is_empty() || extension_mask.iter().any(|ext: &String| file_name.ends_with(ext));
+                                let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
                                 if !matches_mask
                                 {
                                     continue;
@@ -403,7 +404,7 @@ impl App
 
                                 for component in configure.get_components()
                                 {
-                                    if Utils::is_match(&entry.path(), component.get_name(), &extension_mask)
+                                    if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
                                     {
                                         let _ = fs::remove_file(entry.path());
                                         break; 
@@ -421,7 +422,7 @@ impl App
                         {
                             let file_name: String = entry.file_name().to_string_lossy().to_string();
 
-                            let matches_mask: bool = extension_mask.is_empty() || extension_mask.iter().any(|ext: &String| file_name.ends_with(ext));
+                            let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
                             if !matches_mask
                             {
                                 continue;
@@ -434,7 +435,7 @@ impl App
                                     continue;
                                 }
 
-                                if Utils::is_match(&entry.path(), component.get_name(), &extension_mask)
+                                if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
                                 {
                                     let to: std::path::PathBuf = std::path::Path::new(dest_path).join(&file_name);
                                     if fs::copy(entry.path(), to).is_ok()
@@ -482,7 +483,7 @@ impl Widget for &App
 
         // LOGO
         let logo_lines: Vec<Line<'_>> = vec![
-            Line::from(" [esud] mvtool v1.1.3 ").dark_gray().right_aligned(),
+            Line::from(" [esud] mvtool v1.2.0 ").dark_gray().right_aligned(),
         ];
         let logo_block: Paragraph<'_> = Paragraph::new(logo_lines).alignment(ratatui::layout::Alignment::Center);
 

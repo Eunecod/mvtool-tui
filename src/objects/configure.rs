@@ -9,15 +9,16 @@ pub struct Configure
     source_path: String,
     selected: bool,
     clean_destination: bool,
+    extension_mask: Vec<String>,
     components: Vec<Component>,
     scripts: Vec<Script>,
 }
 
 impl Configure
 {
-    pub fn new(name: String, source_path: String, selected: bool, clean_destination: bool, components: Vec<Component>, scripts: Vec<Script>) -> Self
+    pub fn new(name: String, source_path: String, selected: bool, clean_destination: bool, extension_mask: Vec<String>, components: Vec<Component>, scripts: Vec<Script>) -> Self
     {
-        return Self { name, source_path, selected, clean_destination, components, scripts };
+        return Self { name, source_path, selected, clean_destination, extension_mask, components, scripts };
     }
 
     pub fn get_name(&self) -> &String
@@ -43,6 +44,11 @@ impl Configure
     pub fn should_clean(&self) -> bool
     {
         return self.clean_destination;
+    }
+
+    pub fn get_extension_mask(&self) -> &Vec<String>
+    {
+        return &self.extension_mask;
     }
 
     pub fn get_components(&self) -> &Vec<Component>
