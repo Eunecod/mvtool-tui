@@ -18,6 +18,7 @@ use serde_json::Value;
 use ui::checkbox::layout::LayoutCheckboxGroup;
 use ui::checkbox::{ Checkbox, CheckboxState, HorizontalCheckboxGroup, VerticalCheckboxGroup, CheckboxGroupState };
 use ui::messagelog::{ MessageLog, MessageType, LogEvent };
+use ui::spin::{ Spin, SpinState };
 use objects::{ Project, Script, Configure };
 use utils::Utils;
 
@@ -46,6 +47,7 @@ pub struct App
     selected_script: usize,
     active_area: ActiveArea,
     message_log: MessageLog,
+    spin: Spin,
     exit: bool,
 }
 
@@ -63,6 +65,7 @@ impl Default for App
             selected_script: 0,
             active_area: ActiveArea::Project,
             message_log: MessageLog::new(),
+            spin: Spin::new(SpinState::new(0, false)),
             exit: false
         };
     }
@@ -125,6 +128,7 @@ impl App
             terminal.draw(|f: &mut Frame<'_>| self.draw(f))?;
 
             self.message_log.update();
+            self.spin.update();
 
             if event::poll(std::time::Duration::from_millis(16))?
             {
@@ -357,6 +361,10 @@ impl App
         let tx: std::sync::mpsc::Sender<ui::messagelog::LogEvent> = self.message_log.get_sender();
 
         self.message_log.add_message("starting...".into(), MessageType::Info);
+        self.spin.state.procces = true;
+
+        let tx_spin: std::sync::mpsc::Sender<SpinState> = self.spin.get_sender();
+
         std::thread::spawn(move || {
             let mut fallback: bool = true;
             for project in projects
@@ -439,11 +447,11 @@ impl App
                             }
                         }
 
-                        tx.send(LogEvent { message: format!("finished copying {}/{}: {}", copied_count, copied_total, dest_path), message_type: MessageType::Success }).unwrap_or_default();
+                        tx.send(LogEvent { message: format!("finished copying {}/{}: '{}'", copied_count, copied_total, dest_path), message_type: MessageType::Success }).unwrap_or_default();
                     }
                     else
                     {
-                        tx.send(LogEvent { message: format!("failed to read source directory: {}", src_path), message_type: MessageType::Warning }).unwrap_or_default();
+                        tx.send(LogEvent { message: format!("failed to read source directory: '{}'", src_path), message_type: MessageType::Warning }).unwrap_or_default();
                     }
                 }
             }
@@ -452,6 +460,8 @@ impl App
             {
                 tx.send(LogEvent { message: "no project or configure selected, nothing was done".into(), message_type: MessageType::Warning }).unwrap_or_default();
             }
+
+            tx_spin.send(SpinState { tick_count: 0, procces: false }).unwrap_or_default();
         });
     }
 }
@@ -493,14 +503,14 @@ impl Widget for &App
         let script_block: Block<'_> = Block::bordered().title("[ scripts ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Scripts)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
 
         // CONSOLE
-        let console_block: Block<'_> = Block::bordered().title("[ console ]").border_set(border::ROUNDED).padding(Padding { left: 1, right: 0, top: 1, bottom: 1 });
+        let console_block: Block<'_> = Block::bordered().title(format!("[ console {}]", &mut self.spin.get_frame())).border_set(border::ROUNDED).padding(Padding { left: 1, right: 0, top: 1, bottom: 1 });
 
         if !self.projects.is_empty()
         {
             // PROJECT LIST
-            for (i, p) in self.projects.iter().enumerate()
+            for (i, project) in self.projects.iter().enumerate()
             {
-                let mut state: CheckboxState = CheckboxState::new(p.is_selected());
+                let mut state: CheckboxState = CheckboxState::new(project.is_selected());
                 if self.active_area == ActiveArea::Project
                 {
                     state.focus();
@@ -512,7 +522,7 @@ impl Widget for &App
 
                 project_group.add_checkbox(
                     {
-                        let mut checkbox: Checkbox<'_> = Checkbox::new(p.get_name());
+                        let mut checkbox: Checkbox<'_> = Checkbox::new(project.get_name());
                         checkbox.set_state(state);
                         checkbox
                     }
