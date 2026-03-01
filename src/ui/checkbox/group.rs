@@ -1,12 +1,12 @@
 // src/ui/checkbox/group.rs
 
 use ratatui::buffer::Buffer;
-use ratatui::layout::{ Rect, Alignment };
+use ratatui::layout::Rect;
 use ratatui::widgets::{StatefulWidget, Widget, ScrollbarOrientation, Scrollbar, ScrollbarState};
 use crate::ui::checkbox::Checkbox;
 use crate::ui::checkbox::layout::{ LayoutCheckboxGroup, LayoutCheckboxGroupData };
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct CheckboxGroupState
 {
     pub cursor: usize,
@@ -26,11 +26,6 @@ impl<'a> LayoutCheckboxGroup<'a> for HorizontalCheckboxGroup<'a>
     fn add_checkbox(&mut self, checkbox: Checkbox<'a>)
     {
         self.0.checkboxes.push(checkbox);
-    }
-
-    fn alignment(&mut self, value: Alignment)
-    {
-        self.0.alignment = value;
     }
 }
 
@@ -85,11 +80,6 @@ impl<'a> LayoutCheckboxGroup<'a> for VerticalCheckboxGroup<'a>
     fn add_checkbox(&mut self, checkbox: Checkbox<'a>)
     {
         self.0.checkboxes.push(checkbox);
-    }
-
-    fn alignment(&mut self, value: Alignment)
-    {
-        self.0.alignment = value;
     }
 }
 

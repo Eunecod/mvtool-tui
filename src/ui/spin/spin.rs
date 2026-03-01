@@ -2,7 +2,6 @@
 
 use std::sync::mpsc;
 
-#[derive(Debug)]
 pub struct SpinState
 {
     pub tick_count: u32,
@@ -17,7 +16,6 @@ impl SpinState
     }
 }
 
-#[derive(Debug)]
 pub struct Spin
 {
     pub state: SpinState,

@@ -3,7 +3,7 @@
 use ratatui::{ style::{ Color, Style }, widgets::Paragraph };
 use std::sync::mpsc;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Clone, Copy, PartialEq, Default)]
 pub enum MessageType
 {
     #[default]
@@ -27,7 +27,6 @@ impl Default for LogEvent
     }
 }
 
-#[derive(Debug)]
 pub struct MessageLog
 {
     message: String,
