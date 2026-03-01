@@ -471,25 +471,19 @@ impl Widget for &App
 {
     fn render(self, area: Rect, buf: &mut Buffer)
     {
-        let [logo_area, project_area, middle_area, console_area] = Layout::vertical([
-            Constraint::Length(1),
+        let [project_area, middle_area, console_area, bottom_bar_area] = Layout::vertical([
             Constraint::Length(6),
             Constraint::Min(1),
             Constraint::Length(5),
+            Constraint::Length(1),
         ]).areas(area);
 
         let [side_area, component_area] = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(middle_area);
         let [configure_area, script_area] = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(side_area);
 
-        // LOGO
-        let logo_lines: Vec<Line<'_>> = vec![
-            Line::from(" [esud] mvtool v1.2.0 ").dark_gray().right_aligned(),
-        ];
-        let logo_block: Paragraph<'_> = Paragraph::new(logo_lines).alignment(ratatui::layout::Alignment::Center);
-
         // PROJECT LIST
         let mut project_group: HorizontalCheckboxGroup<'_> = HorizontalCheckboxGroup::new();
-        let project_block: Block<'_> = Block::bordered().title("[ projects ]".bold()).border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Project)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
+        let project_block: Block<'_> = Block::bordered().title("[ projects ] - use ← → to navigate ".bold()).border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Project)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
 
         // CONFIGURE LIST
         let mut configure_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
@@ -505,6 +499,19 @@ impl Widget for &App
 
         // CONSOLE
         let console_block: Block<'_> = Block::bordered().title(format!("[ console {}]", &mut self.spin.get_frame())).border_set(border::ROUNDED).padding(Padding { left: 1, right: 0, top: 1, bottom: 1 });
+
+        // BOTTOM BAR
+        let bottom_bar_help_menu: Paragraph<'_> = Paragraph::new(
+            Line::from(vec!
+                [
+                    " F1 ".black().on_gray(), " Run ".gray(),
+                    " Space ".black().on_gray(), " Toggle ".gray(),
+                    " Tab ".black().on_gray(), " Next Area ".gray(),
+                    " ▲ ▼ ".black().on_gray(), " Move ".gray(),
+                    " Esc ".black().on_gray(), " Exit ".gray(),
+                ]
+        )).style(Style::default().bg(Color::Reset)).alignment(ratatui::layout::Alignment::Left);
+        let bottom_bar_version: Paragraph<'_> = Paragraph::new(" [esud] mvtool v1.2.0 ".gray()).alignment(ratatui::layout::Alignment::Right);
 
         if !self.projects.is_empty()
         {
@@ -606,9 +613,6 @@ impl Widget for &App
         // CONSOLE
         let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
         
-        // RENDER MAINLAYOUT 0
-        logo_block.render(logo_area, buf);
-
         // RENDER SUBLAYOUT 0
         project_group.render(project_block.inner(project_area), buf, &mut CheckboxGroupState { cursor: self.selected_project, scroll_offset: 0 });
         project_block.render(project_area, buf);
@@ -625,7 +629,11 @@ impl Widget for &App
         script_group.render(script_block.inner(script_area), buf, &mut CheckboxGroupState { cursor: self.selected_script, scroll_offset: 0 });
         script_block.render(script_area, buf);
 
-        // RENDER MAINLAYOUT 1
+        // RENDER MAINLAYOUT 0
         console.render(console_area, buf);
+
+        // RENDER MAINLAYOUT 1
+        bottom_bar_help_menu.render(bottom_bar_area, buf);
+        bottom_bar_version.render(bottom_bar_area, buf);
     }
 }
