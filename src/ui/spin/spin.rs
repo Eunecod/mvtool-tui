@@ -25,7 +25,7 @@ pub struct Spin
 
 impl Spin
 {
-    const FRAMES: &'static [&'static str] = &["◜", "◠", "◝", "◞", "◡", "◟"];
+    const FRAMES: &'static [&'static str] = &["⠁", "⠉", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠃"];
 
     pub fn new(state: SpinState) -> Self
     {
