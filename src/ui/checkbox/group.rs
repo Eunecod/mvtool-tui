@@ -10,7 +10,6 @@ use crate::ui::checkbox::layout::{ LayoutCheckboxGroup, LayoutCheckboxGroupData 
 pub struct CheckboxGroupState
 {
     pub cursor: usize,
-    pub scroll_offset: usize,
 }
 
 pub struct HorizontalCheckboxGroup<'a>(LayoutCheckboxGroupData<'a>);
@@ -43,17 +42,18 @@ impl<'a> StatefulWidget for HorizontalCheckboxGroup<'a>
 
         let visible_count: usize = area.width as usize / total_items;
 
-        if state.cursor >= state.scroll_offset + visible_count
+        let mut scroll_offset: usize = 0;
+        if state.cursor >= scroll_offset + visible_count
         {
-            state.scroll_offset = (state.cursor + 1).saturating_sub(visible_count);
+            scroll_offset = (state.cursor + 1).saturating_sub(visible_count);
         }
-        else if state.cursor < state.scroll_offset
+        else if state.cursor < scroll_offset
         {
-            state.scroll_offset = state.cursor;
+            scroll_offset = state.cursor;
         }
 
         let mut x: u16 = area.x;
-        for checkbox in self.0.checkboxes.into_iter().skip(state.scroll_offset)
+        for checkbox in self.0.checkboxes.into_iter().skip(scroll_offset)
         {
             let width: u16 = checkbox.name.len() as u16 + 4;
             if x + width > area.right()
@@ -97,16 +97,17 @@ impl<'a> StatefulWidget for VerticalCheckboxGroup<'a>
             return;
         }
 
-        if state.cursor >= state.scroll_offset + height
+        let mut scroll_offset: usize = 0;
+        if state.cursor >= scroll_offset + height
         {
-            state.scroll_offset = state.cursor - height + 1;
+            scroll_offset = state.cursor - height + 1;
         }
-        else if state.cursor < state.scroll_offset
+        else if state.cursor < scroll_offset
         {
-            state.scroll_offset = state.cursor;
+            scroll_offset = state.cursor;
         }
 
-        for (i, checkbox) in self.0.checkboxes.into_iter().skip(state.scroll_offset).enumerate()
+        for (i, checkbox) in self.0.checkboxes.into_iter().skip(scroll_offset).enumerate()
         {
             let y: u16 = area.y + i as u16;
             if y >= area.bottom()
