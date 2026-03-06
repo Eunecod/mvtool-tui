@@ -1,7 +1,7 @@
 // src/main.rs
 
 //   /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$  | 
-//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v1.2.0
+//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v1.3.0
 // | $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$ | 30/01/2025
 // | $$  | $$| $$  | $$|  $$$$$$/| $$  | $$ | 
 // |__/  |__/|__/  |__/ \____ $$$|__/  |__/ | Лецензии нет делай все что хочешь форкай не форкай копипасти ломай строй и т.д. :)
@@ -10,24 +10,29 @@
 mod objects;
 mod utils;
 mod ui;
+mod updater;
 
-use std::{ fs, io, process::Command };
+use std::{ fs, io, ops::Add, process::Command };
 use crossterm::event::{ self, Event, KeyCode, KeyEventKind };
-use ratatui::{ buffer::Buffer, symbols::border, layout::{ Constraint, Layout, Rect }, style::{ Color, Style, Stylize, Modifier }, text::{ Line }, widgets::{ Block, Paragraph, Widget, Padding, StatefulWidget }, DefaultTerminal, Frame };
+use ratatui::{ DefaultTerminal, Frame, buffer::Buffer, layout::{ Alignment, Constraint, Layout, Rect }, style::{ Color, Modifier, Style, Stylize }, symbols::border, text::Line, widgets::{ Block, Padding, Paragraph, StatefulWidget, Widget } };
 use serde_json::Value;
 use ui::checkbox::layout::LayoutCheckboxGroup;
 use ui::checkbox::{ Checkbox, CheckboxState, HorizontalCheckboxGroup, VerticalCheckboxGroup, CheckboxGroupState };
-use ui::messagelog::{ MessageLog, MessageType, LogEvent };
+use ui::messagelog::{ MessageLog, MessageType };
+use ui::messagebox::MessageBox;
 use ui::spin::{ Spin, SpinState };
 use objects::{ Project, Script, Configure };
 use utils::Utils;
+use updater::{ Updater, ReleaseUpdateGithub };
+
+use std::sync::mpsc;
 
 fn main() -> io::Result<()>
 {
     return ratatui::run(|terminal: &mut ratatui::Terminal<ratatui::prelude::CrosstermBackend<io::Stdout>>| App::default().run(terminal));
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Clone, Copy, PartialEq, Default)]
 enum ActiveArea
 {
     #[default] Project,
@@ -36,9 +41,18 @@ enum ActiveArea
     Scripts,
 }
 
-#[derive(Debug)]
+pub enum AppEvent
+{
+    UpdateAvailable(ReleaseUpdateGithub),
+    Log(String, MessageType),
+    WaitProcess(SpinState),
+}
+
 pub struct App
 {
+    event_bus: (mpsc::Sender<AppEvent>, mpsc::Receiver<AppEvent>),
+    
+    message_box: Option<MessageBox<'static>>,
     projects: Vec<Project>,
     selected_project: usize,
     selected_configure: usize,
@@ -56,6 +70,9 @@ impl Default for App
     {
         return Self
         {
+            event_bus: std::sync::mpsc::channel(),
+            
+            message_box: None,
             projects: Vec::new(),
             selected_project: 0,
             selected_configure: 0,
@@ -64,7 +81,7 @@ impl Default for App
             active_area: ActiveArea::Project,
             message_log: MessageLog::new(),
             spin: Spin::new(SpinState::new(0, false)),
-            exit: false
+            exit: false,
         };
     }
 }
@@ -77,9 +94,25 @@ impl App
         let json: Value = serde_json::from_str(&content).unwrap_or(Value::Null);
         if json.is_null()
         {
-            self.message_log.add_message("failed to load setting.json".into(), MessageType::Error);
+            let _ = self.event_bus.0.send(AppEvent::Log("failed to load setting.json".into(), MessageType::Error));
             return;
         }
+
+        let tx: mpsc::Sender<AppEvent> = self.event_bus.0.clone();
+        std::thread::spawn(
+            move ||
+            {
+                if let Ok(updater) = Updater::new().fetch()
+                {
+                    let _ = tx.send(AppEvent::UpdateAvailable(
+                        ReleaseUpdateGithub
+                        { 
+                            version_current: updater.state.version_current, version_new: updater.state.version_new, is_available: updater.state.is_available
+                        }
+                    ));
+                }
+            }
+        );
 
         for projects in json["projects"].as_array().unwrap_or(&vec![])
         {
@@ -119,18 +152,18 @@ impl App
             ));
         }
 
-        self.message_log.add_message("initialized 'mvtool'".into(), MessageType::Success);
+        let _ = self.event_bus.0.send(AppEvent::Log("initialized 'mvtool'".into(), MessageType::Success));
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()>
     {
         self.init();
+
         while !self.exit
         {
             terminal.draw(|f: &mut Frame<'_>| self.draw(f))?;
 
-            self.message_log.update();
-            self.spin.update();
+            self.handle_updates();
 
             if event::poll(std::time::Duration::from_millis(16))?
             {
@@ -139,6 +172,75 @@ impl App
         }
 
         return Ok(());
+    }
+
+    fn run_update(tx: mpsc::Sender<AppEvent>)
+    {   
+        let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: true }));
+        let _ = tx.send(AppEvent::Log("starting update process...".into(), MessageType::Info));
+
+        std::thread::spawn(
+            move ||
+            {
+                let result: Result<(), String> = (|| -> Result<(), String>
+                {
+                    let updater: Updater = Updater::new().fetch().map_err(|error| format!("fetch was cancelled for the following reasons: {error}"))?;
+                    updater.update(tx.clone()).map_err(|error| format!("update process was aborted with the following error: {error}"))?;
+
+                    return Ok(());
+                }
+            )();
+
+            match result
+            {
+                Ok(_) => std::process::exit(0),
+                Err(error) =>
+                {
+                    let _ = tx.send(AppEvent::Log(error, MessageType::Error));
+                    let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: false }));
+                }
+            }
+        });
+    }
+
+    fn handle_updates(&mut self)
+    {
+        while let Ok(event) = self.event_bus.1.try_recv()
+        {
+            match event
+            {
+                AppEvent::UpdateAvailable(state) =>
+                {
+                    if state.is_available
+                    {
+                        let tx: mpsc::Sender<AppEvent> = self.event_bus.0.clone();
+                        self.message_box = Some(MessageBox::new("[ update ]", 
+                            vec![
+                                Line::from("New version available!".bold()).alignment(Alignment::Center),
+                                Line::from(""),
+                                Line::from(format!("current version: v.{}", state.version_current)).alignment(Alignment::Center),
+                                Line::from(format!("new version: v.{}", state.version_new)).alignment(Alignment::Center),
+                            ].into()
+                            )
+                            .with_size(50, 25)
+                            .set_accept(
+                                {
+                                    move || { Self::run_update(tx.clone()); }
+                                } 
+                            )
+                        );
+                    }
+                }
+                AppEvent::WaitProcess(state) =>
+                {
+                    self.spin.state = state;
+                }
+                AppEvent::Log(message, message_type) =>
+                {
+                    self.message_log.add_message(message, message_type);
+                }
+            }
+        }
     }
 
     fn draw(&self, frame: &mut Frame)
@@ -162,21 +264,37 @@ impl App
     {
         if let Event::Key(key) = event::read()?
         {
-            if key.kind == KeyEventKind::Press
+            if key.kind != KeyEventKind::Press
+            {
+                return Ok(());
+            }
+
+            if let Some(message_box) = self.message_box.take()
             {
                 match key.code
                 {
-                    KeyCode::Up        => self.move_selection(-1),
-                    KeyCode::Down      => self.move_selection(1),
-                    KeyCode::Left      => self.move_project(-1),
-                    KeyCode::Right     => self.move_project(1),
-                    KeyCode::Char(' ') => self.on_action(),
-                    KeyCode::Tab       => self.next_area(true),
-                    KeyCode::BackTab   => self.next_area(false),
-                    KeyCode::F(1)      => self.ok(),
-                    KeyCode::Esc       => self.exit = true,
-                    _ => {}
+                    KeyCode::Enter => message_box.accept(),
+                    KeyCode::Esc   => message_box.reject(),
+
+                    _ => { self.message_box = Some(message_box); }
                 }
+
+                return Ok(());
+            }
+        
+            match key.code
+            {
+                KeyCode::Up         => self.move_selection(-1),
+                KeyCode::Down       => self.move_selection(1),
+                KeyCode::Left       => self.move_project(-1),
+                KeyCode::Right      => self.move_project(1),
+                KeyCode::Char(' ')  => self.on_action(),
+                KeyCode::Tab        => self.next_area(true),
+                KeyCode::BackTab    => self.next_area(false),
+                KeyCode::F(1)       if !self.spin.state.procces => self.ok(),
+                KeyCode::Esc        if !self.spin.state.procces => self.exit = true,
+
+                _ => {}
             }
         }
 
@@ -269,7 +387,7 @@ impl App
             {
                 self.selected_configure = self.get_selected_current_configure();
             }
-
+        
             _ => {}
         }
 
@@ -298,7 +416,12 @@ impl App
                 }
 
                 let selected: bool = self.projects[self.selected_project].is_selected();
-                self.projects.iter_mut().for_each(|p: &mut Project| p.set_selected(false));
+                self.projects.iter_mut().for_each(
+                    |project: &mut Project|
+                    {
+                        project.set_selected(false);
+                    }
+                );
                 self.projects[self.selected_project].set_selected(!selected);
             }
             ActiveArea::Configure =>
@@ -309,9 +432,9 @@ impl App
                 }
 
                 let project: &mut Project = &mut self.projects[self.selected_project];
+                
                 let selected: bool = project.get_configures()[self.selected_configure].is_selected();
-
-                project.get_configures_mut().iter_mut().for_each(|configure: &mut Configure| configure.set_selected(false));
+                project.get_configures_mut().iter_mut().for_each(|configure: &mut Configure| { configure.set_selected(false); });
                 project.get_configures_mut()[self.selected_configure].set_selected(!selected);
             }
             ActiveArea::Component =>
@@ -334,7 +457,7 @@ impl App
                 let script: &Script = &self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts()[self.selected_script];
                 let config: &Configure = &self.projects[self.selected_project].get_configures()[self.selected_configure];
 
-                self.message_log.add_message(format!("running: {}", script.get_name()), MessageType::Info);
+                let _ = self.event_bus.0.send(AppEvent::Log(format!("running: {}", script.get_name()), MessageType::Info));
 
                 let status: Result<std::process::ExitStatus, io::Error> = Command::new("cmd").args(
                     ["/C", "start", format!("mvtool: {}", script.get_name()).as_str(), "cmd", "/K", script.get_command()]).current_dir(config.get_path()
@@ -345,11 +468,11 @@ impl App
                     Ok(stat)
                     if stat.success() =>
                     {
-                        self.message_log.add_message(format!("executed script: {}", script.get_name()), MessageType::Success);
+                        let _ = self.event_bus.0.send(AppEvent::Log(format!("executed script: {}", script.get_name()), MessageType::Success));
                     }
                     _ =>
                     {
-                        self.message_log.add_message(format!("failed to run or script error: {}", script.get_name()), MessageType::Error);
+                        let _ = self.event_bus.0.send(AppEvent::Log(format!("failed to run or script error: {}", script.get_name()), MessageType::Error));
                     }
                 }
             }
@@ -359,43 +482,68 @@ impl App
     fn ok(&mut self)
     {
         let projects: Vec<Project> = self.projects.clone();
-        let tx: std::sync::mpsc::Sender<ui::messagelog::LogEvent> = self.message_log.get_sender();
 
-        self.message_log.add_message("starting...".into(), MessageType::Info);
-        self.spin.state.procces = true;
+        let tx: mpsc::Sender<AppEvent> = self.event_bus.0.clone();
+        let _ = tx.send(AppEvent::Log("starting...".into(), MessageType::Info));
+        let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: true }));
 
-        let tx_spin: std::sync::mpsc::Sender<SpinState> = self.spin.get_sender();
-
-        std::thread::spawn(move || {
-            let mut fallback: bool = true;
-            for project in projects
+        std::thread::spawn(
+            move ||
             {
-                if !project.is_selected()
+                let mut fallback: bool = true;
+                for project in projects
                 {
-                    continue;
-                }
-                let dest_path: &String = project.get_destination();
-
-                for configure in project.get_configures()
-                {
-                    if !configure.is_selected()
+                    if !project.is_selected()
                     {
                         continue;
                     }
-                    let src_path: &String = configure.get_path();
+                    let dest_path: &String = project.get_destination();
 
-                    fallback = false;
+                    for configure in project.get_configures()
+                    {
+                        if !configure.is_selected()
+                        {
+                            continue;
+                        }
+                        let src_path: &String = configure.get_path();
 
-                    if configure.should_clean()
-                    { 
-                        tx.send(LogEvent { message: "cleaning components...".into(), message_type: MessageType::Info }).unwrap_or_default();
+                        fallback = false;
 
-                        if let Ok(entries) = fs::read_dir(dest_path)
+                        if configure.should_clean()
+                        { 
+                            let _ = tx.send(AppEvent::Log("cleaning components...".into(), MessageType::Info));
+
+                            if let Ok(entries) = fs::read_dir(dest_path)
+                            {
+                                for entry in entries.flatten()
+                                {
+                                    let file_name: String = entry.file_name().to_string_lossy().to_string();
+                                    
+                                    let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
+                                    if !matches_mask
+                                    {
+                                        continue;
+                                    }
+
+                                    for component in configure.get_components()
+                                    {
+                                        if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
+                                        {
+                                            let _ = fs::remove_file(entry.path());
+                                            break; 
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        let mut files_to_copy: Vec<(std::path::PathBuf, String)> = Vec::new();
+                        if let Ok(entries) = fs::read_dir(src_path)
                         {
                             for entry in entries.flatten()
                             {
                                 let file_name: String = entry.file_name().to_string_lossy().to_string();
-                                
+
                                 let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
                                 if !matches_mask
                                 {
@@ -404,66 +552,56 @@ impl App
 
                                 for component in configure.get_components()
                                 {
+                                    if !component.is_selected()
+                                    {
+                                        continue;
+                                    }
+
                                     if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
                                     {
-                                        let _ = fs::remove_file(entry.path());
-                                        break; 
+                                        files_to_copy.push((entry.path(), file_name.clone()));
+                                        break;
                                     }
                                 }
                             }
                         }
-                    }
-
-                    let mut copied_count: usize = 0;
-                    let mut copied_total: usize = 0;
-                    if let Ok(entries) = fs::read_dir(src_path)
-                    {
-                        for entry in entries.flatten()
+                        else
                         {
-                            let file_name: String = entry.file_name().to_string_lossy().to_string();
-
-                            let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
-                            if !matches_mask
-                            {
-                                continue;
-                            }
-
-                            for component in configure.get_components()
-                            {
-                                if !component.is_selected()
-                                {
-                                    continue;
-                                }
-
-                                if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
-                                {
-                                    let to: std::path::PathBuf = std::path::Path::new(dest_path).join(&file_name);
-                                    if fs::copy(entry.path(), to).is_ok()
-                                    {
-                                        copied_count += 1;
-                                        tx.send(LogEvent { message: format!("processed copying {}: {}", copied_count, file_name), message_type: MessageType::Info }).unwrap_or_default();
-                                    }
-                                    copied_total += 1;
-                                }
-                            }
+                            let _ = tx.send(AppEvent::Log(format!("failed to read source directory: '{}'", src_path), MessageType::Warning));
                         }
 
-                        tx.send(LogEvent { message: format!("finished copying {}/{}: '{}'", copied_count, copied_total, dest_path), message_type: MessageType::Success }).unwrap_or_default();
-                    }
-                    else
-                    {
-                        tx.send(LogEvent { message: format!("failed to read source directory: '{}'", src_path), message_type: MessageType::Warning }).unwrap_or_default();
+                        let copied_total: usize = files_to_copy.len();
+                        let mut copied_count: usize = 0;
+                        if copied_total == 0
+                        {
+                            let _ = tx.send(AppEvent::Log("no files matched the criteria".into(), MessageType::Info));
+                        }
+                        else
+                        {
+                            for (path, file_name) in files_to_copy
+                            {
+                                let to = std::path::Path::new(dest_path).join(&file_name);
+
+                                if fs::copy(&path, to).is_ok()
+                                {
+                                    copied_count = copied_count.add(1);
+                                    let _ = tx.send(AppEvent::Log(format!("[{}/{}] copying: {}", copied_count, copied_total, file_name), MessageType::Info));
+                                }
+                            }
+
+                            let _ = tx.send(AppEvent::Log(format!("finished copying {}/{}: '{}'", copied_count, copied_total, dest_path), MessageType::Success));
+                        }
                     }
                 }
-            }
 
-            if fallback
-            {
-                tx.send(LogEvent { message: "no project or configure selected, nothing was done".into(), message_type: MessageType::Warning }).unwrap_or_default();
-            }
+                if fallback
+                {
+                    let _ = tx.send(AppEvent::Log("no project or configure selected, nothing was done".into(), MessageType::Warning));
+                }
 
-            tx_spin.send(SpinState { tick_count: 0, procces: false }).unwrap_or_default();
-        });
+                let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: false }));
+            }
+        );
     }
 }
 
@@ -511,7 +649,7 @@ impl Widget for &App
                     " Esc ".black().on_gray(), " Exit ".gray(),
                 ]
         )).style(Style::default().bg(Color::Reset)).alignment(ratatui::layout::Alignment::Left);
-        let bottom_bar_version: Paragraph<'_> = Paragraph::new(" [esud] mvtool v1.2.0 ".gray()).alignment(ratatui::layout::Alignment::Right);
+        let bottom_bar_version: Paragraph<'_> = Paragraph::new(" [esud] mvtool v1.3.0 ".gray()).alignment(ratatui::layout::Alignment::Right);
 
         if !self.projects.is_empty()
         {
@@ -587,7 +725,7 @@ impl Widget for &App
             for (i, script) in scripts.iter().enumerate()
             {
                 let mut state: CheckboxState = CheckboxState::new(false);
-                state.data.symbols = Some(("", "➔ "));
+                state.data.symbols = Some(("", "→"));
                 state.data.style_highlighted = Some(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
 
                 if self.active_area == ActiveArea::Scripts
@@ -614,19 +752,19 @@ impl Widget for &App
         let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
         
         // RENDER SUBLAYOUT 0
-        project_group.render(project_block.inner(project_area), buf, &mut CheckboxGroupState { cursor: self.selected_project, scroll_offset: 0 });
+        project_group.render(project_block.inner(project_area), buf, &mut CheckboxGroupState { cursor: self.selected_project });
         project_block.render(project_area, buf);
 
         // RENDER SUBLAYOUT 1
-        component_group.render(component_block.inner(component_area), buf, &mut CheckboxGroupState { cursor: self.selected_component, scroll_offset: 0 });
+        component_group.render(component_block.inner(component_area), buf, &mut CheckboxGroupState { cursor: self.selected_component });
         component_block.render(component_area, buf);
 
         // RENDER SUBLAYOUT 2
-        configure_group.render(configure_block.inner(configure_area), buf, &mut CheckboxGroupState { cursor: self.selected_configure, scroll_offset: 0 });
+        configure_group.render(configure_block.inner(configure_area), buf, &mut CheckboxGroupState { cursor: self.selected_configure });
         configure_block.render(configure_area, buf);
 
         // RENDER SUBLAYOUT 3
-        script_group.render(script_block.inner(script_area), buf, &mut CheckboxGroupState { cursor: self.selected_script, scroll_offset: 0 });
+        script_group.render(script_block.inner(script_area), buf, &mut CheckboxGroupState { cursor: self.selected_script });
         script_block.render(script_area, buf);
 
         // RENDER MAINLAYOUT 0
@@ -635,5 +773,11 @@ impl Widget for &App
         // RENDER MAINLAYOUT 1
         bottom_bar_help_menu.render(bottom_bar_area, buf);
         bottom_bar_version.render(bottom_bar_area, buf);
+
+        // RENDER MESSAGEBOX
+        if let Some(message_box) = self.message_box.as_ref()
+        {
+            Widget::render(message_box, area, buf);
+        }
     }
 }
