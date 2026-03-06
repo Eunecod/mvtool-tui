@@ -29,7 +29,16 @@ impl ReleaseUpdateGithub
 {
     pub fn new(versions: (String, String)) -> Self
     {
-        let is_available: bool = versions.0 != versions.1;
+        let is_available: bool = if let (Ok(current), Ok(new))
+            = (semver::Version::parse(versions.0.trim_start_matches('v')), semver::Version::parse(versions.1.trim_start_matches('v')))
+        {
+            new > current
+        }
+        else
+        {
+            false
+        };
+
         return Self { version_current: versions.0, version_new: versions.1, is_available: is_available, };
     }
 }
