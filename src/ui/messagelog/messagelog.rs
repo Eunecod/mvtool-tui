@@ -1,7 +1,6 @@
 // src/ui/messagelog/messagelog.rs
 
 use ratatui::{ style::{ Color, Style }, widgets::Paragraph };
-use std::sync::mpsc;
 
 #[derive(Clone, Copy, PartialEq, Default)]
 pub enum MessageType
@@ -13,42 +12,17 @@ pub enum MessageType
     Info,
 }
 
-pub struct LogEvent
-{
-    pub message: String,
-    pub message_type: MessageType,
-}
-
-impl Default for LogEvent
-{
-    fn default() -> Self
-    {
-        return Self { message: "unregistered message".into(), message_type: MessageType::Warning };
-    }
-}
-
 pub struct MessageLog
 {
     message: String,
     message_type: MessageType,
-    sender: mpsc::Sender<LogEvent>,
-    receiver: mpsc::Receiver<LogEvent>
 }
 
 impl MessageLog
 {   
     pub fn new() -> Self
     {
-        let (sender, receiver) = mpsc::channel();
-        return Self { message: String::new(), message_type: MessageType::Info, sender, receiver };
-    }
-
-    pub fn update(&mut self)
-    {
-        while let Ok(event) = self.receiver.try_recv()
-        {
-            self.add_message(event.message, event.message_type);
-        }
+        return Self { message: String::new(), message_type: MessageType::Info };
     }
 
     pub fn add_message(&mut self, message: String, message_type: MessageType)
@@ -81,10 +55,4 @@ impl MessageLog
         
         return Paragraph::new(format!("{} {}", prefix, self.message)).style(style);
     }
-
-    pub fn get_sender(&self) -> mpsc::Sender<LogEvent>
-    {
-        self.sender.clone()
-    }
-
 }
