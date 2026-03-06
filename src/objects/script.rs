@@ -1,6 +1,6 @@
 // src/objects/script.rs
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Script
 {
     name: String,

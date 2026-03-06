@@ -2,7 +2,7 @@
 
 use crate::objects::{ Component, Script };
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Configure
 {
     name: String,

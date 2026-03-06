@@ -1,6 +1,6 @@
 // src/objects/component.rs
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Component
 {
     name: String,

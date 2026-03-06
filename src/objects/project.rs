@@ -2,7 +2,7 @@
 
 use crate::objects::Configure;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Project
 {
     name: String,

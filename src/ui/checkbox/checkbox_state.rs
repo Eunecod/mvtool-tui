@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{ Color, Style, Modifier };
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub struct CheckboxStateData
 {
     pub style_highlighted: Option<Style>,
@@ -14,7 +14,7 @@ pub struct CheckboxStateData
     pub is_highlighted: bool,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Default, Clone, Copy)]
 pub struct CheckboxState
 {
     pub data: CheckboxStateData,
