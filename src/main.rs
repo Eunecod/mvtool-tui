@@ -162,8 +162,9 @@ impl App
         while !self.exit
         {
             terminal.draw(|f: &mut Frame<'_>| self.draw(f))?;
-
+            
             self.handle_updates();
+            self.spin.tick();
 
             if event::poll(std::time::Duration::from_millis(16))?
             {

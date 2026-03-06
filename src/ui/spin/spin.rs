@@ -38,4 +38,15 @@ impl Spin
         let index: usize = (self.state.tick_count as usize) % Self::FRAMES.len();
         return Self::FRAMES[index];
     }
+
+    pub fn tick(&mut self)
+    {
+        if !self.state.procces
+        {
+            self.state.tick_count = 0;
+            return;
+        }
+
+        self.state.tick_count = self.state.tick_count.wrapping_add(1);
+    }
 }
