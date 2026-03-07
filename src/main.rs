@@ -732,23 +732,19 @@ impl Widget for &App
         let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
         
         // RENDER SUBLAYOUT 0
-        let mut state_project: CheckboxGroupState = self.state_project.clone();
-        project_group.render(project_block.inner(project_area), buf, &mut state_project);
+        project_group.render(project_block.inner(project_area), buf, &mut self.state_project.clone());
         project_block.render(project_area, buf);
 
         // RENDER SUBLAYOUT 1
-        let mut state_component: CheckboxGroupState = self.state_component.clone();
-        component_group.render(component_block.inner(component_area), buf, &mut state_component);
+        component_group.render(component_block.inner(component_area), buf, &mut self.state_component.clone());
         component_block.render(component_area, buf);
 
         // RENDER SUBLAYOUT 2
-        let mut state_configure: CheckboxGroupState = self.state_configure.clone();
-        configure_group.render(configure_block.inner(configure_area), buf, &mut state_configure);
+        configure_group.render(configure_block.inner(configure_area), buf, &mut self.state_configure.clone());
         configure_block.render(configure_area, buf);
 
         // RENDER SUBLAYOUT 3
-        let mut state_script: CheckboxGroupState = self.state_script.clone();
-        script_group.render(script_block.inner(script_area), buf, &mut state_script);
+        script_group.render(script_block.inner(script_area), buf, &mut self.state_script.clone());
         script_block.render(script_area, buf);
 
         // RENDER MAINLAYOUT 0
