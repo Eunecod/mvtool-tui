@@ -6,10 +6,19 @@ use ratatui::widgets::{StatefulWidget, Widget, ScrollbarOrientation, Scrollbar, 
 use crate::ui::checkbox::Checkbox;
 use crate::ui::checkbox::layout::{ LayoutCheckboxGroup, LayoutCheckboxGroupData };
 
-#[derive(Default)]
+#[derive(Clone)]
 pub struct CheckboxGroupState
 {
     pub cursor: usize,
+    pub selected: usize,
+}
+
+impl Default for CheckboxGroupState
+{
+    fn default() -> Self
+    {
+        return Self { cursor: 0, selected: 0 };
+    }
 }
 
 pub struct HorizontalCheckboxGroup<'a>(LayoutCheckboxGroupData<'a>);

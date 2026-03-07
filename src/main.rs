@@ -54,10 +54,10 @@ pub struct App
     
     message_box: Option<MessageBox<'static>>,
     projects: Vec<Project>,
-    selected_project: usize,
-    selected_configure: usize,
-    selected_component: usize,
-    selected_script: usize,
+    state_project: CheckboxGroupState,
+    state_configure: CheckboxGroupState,
+    state_component: CheckboxGroupState,
+    state_script: CheckboxGroupState,
     active_area: ActiveArea,
     message_log: MessageLog,
     spin: Spin,
@@ -74,10 +74,10 @@ impl Default for App
             
             message_box: None,
             projects: Vec::new(),
-            selected_project: 0,
-            selected_configure: 0,
-            selected_component: 0,
-            selected_script: 0,
+            state_project: CheckboxGroupState::default(),
+            state_configure: CheckboxGroupState::default(),
+            state_component: CheckboxGroupState::default(),
+            state_script: CheckboxGroupState::default(),
             active_area: ActiveArea::Project,
             message_log: MessageLog::new(),
             spin: Spin::new(SpinState::new(0, false)),
@@ -430,33 +430,33 @@ impl App
         {
             ActiveArea::Configure =>
             {
-                let len: usize = self.projects[self.selected_project].get_configures().len();
+                let len: usize = self.projects[self.state_project.cursor].get_configures().len();
                 if len == 0
                 {
                     return;
                 }
 
-                self.selected_configure = (self.selected_configure as i32 + delta).clamp(0, len as i32 - 1) as usize;
+                self.state_configure.cursor = (self.state_configure.cursor as i32 + delta).clamp(0, len as i32 - 1) as usize;
             }
             ActiveArea::Component =>
             {
-                let len: usize = self.projects[self.selected_project].get_configures()[self.selected_configure].get_components().len();
+                let len: usize = self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_components().len();
                 if len == 0
                 {
                     return;
                 }
 
-                self.selected_component = (self.selected_component as i32 + delta).clamp(0, len as i32 - 1) as usize;
+                self.state_component.cursor = (self.state_component.cursor as i32 + delta).clamp(0, len as i32 - 1) as usize;
             }
             ActiveArea::Scripts =>
             {
-                let len: usize = self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts().len();
+                let len: usize = self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_scripts().len();
                 if len == 0
                 {
                     return;
                 }
 
-                self.selected_script = (self.selected_script as i32 + delta).clamp(0, len as i32 - 1) as usize;
+                self.state_script.cursor = (self.state_script.cursor as i32 + delta).clamp(0, len as i32 - 1) as usize;
             }
 
             _ => {}
@@ -467,35 +467,9 @@ impl App
     {
         if self.active_area == ActiveArea::Project && !self.projects.is_empty()
         {
-            self.selected_project = (self.selected_project as i32 + delta).clamp(0, self.projects.len() as i32 - 1) as usize;
-            self.selected_configure = 0;
+            self.state_project.cursor = (self.state_project.cursor as i32 + delta).clamp(0, self.projects.len() as i32 - 1) as usize;
+            self.state_configure.cursor = 0;
         }
-    }
-
-    fn get_selected_current_project(&self) -> usize
-    {
-        for (i, project) in self.projects.iter().enumerate()
-        {
-            if project.is_selected()
-            {
-                return i;
-            }
-        }
-
-        return 0 as usize;
-    }
-
-    fn get_selected_current_configure(&self) -> usize
-    {
-        for (i, configure) in self.projects[self.selected_project].get_configures().iter().enumerate()
-        {
-            if configure.is_selected()
-            {
-                return i;
-            }
-        }
-
-        return 0 as usize;
     }
 
     fn next_area(&mut self, forward: bool)
@@ -504,11 +478,11 @@ impl App
         {
             ActiveArea::Project =>
             {
-                self.selected_project = self.get_selected_current_project();
+                self.state_project.cursor = self.state_project.selected;
             }
             ActiveArea::Configure =>
             {
-                self.selected_configure = self.get_selected_current_configure();
+                self.state_configure.cursor = self.state_configure.selected;
             }
         
             _ => {}
@@ -538,47 +512,49 @@ impl App
                     return;
                 }
 
-                let selected: bool = self.projects[self.selected_project].is_selected();
+                self.state_project.selected = self.state_project.cursor;
+                let selected: bool = self.projects[self.state_project.cursor].is_selected();
                 self.projects.iter_mut().for_each(
                     |project: &mut Project|
                     {
                         project.set_selected(false);
                     }
                 );
-                self.projects[self.selected_project].set_selected(!selected);
+                self.projects[self.state_project.cursor].set_selected(!selected);
             }
             ActiveArea::Configure =>
             {
-                if self.projects[self.selected_project].get_configures().is_empty()
+                if self.projects[self.state_project.cursor].get_configures().is_empty()
                 {
                     return;
                 }
-
-                let project: &mut Project = &mut self.projects[self.selected_project];
                 
-                let selected: bool = project.get_configures()[self.selected_configure].is_selected();
+                let project: &mut Project = &mut self.projects[self.state_project.cursor];
+                
+                self.state_configure.selected = self.state_configure.cursor;
+                let selected: bool = project.get_configures()[self.state_configure.cursor].is_selected();
                 project.get_configures_mut().iter_mut().for_each(|configure: &mut Configure| { configure.set_selected(false); });
-                project.get_configures_mut()[self.selected_configure].set_selected(!selected);
+                project.get_configures_mut()[self.state_configure.cursor].set_selected(!selected);
             }
             ActiveArea::Component =>
             {
-                if self.projects[self.selected_project].get_configures()[self.selected_configure].get_components().is_empty()
+                if self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_components().is_empty()
                 {
                     return;
                 }
 
-                let component: &mut objects::Component = &mut self.projects[self.selected_project].get_configures_mut()[self.selected_configure].get_components_mut()[self.selected_component];
+                let component: &mut objects::Component = &mut self.projects[self.state_project.cursor].get_configures_mut()[self.state_configure.cursor].get_components_mut()[self.state_component.cursor];
                 component.set_selected(!component.is_selected());
             }
             ActiveArea::Scripts =>
             {
-                if self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts().is_empty()
+                if self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_scripts().is_empty()
                 {
                     return;
                 }
 
-                let script: &Script = &self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts()[self.selected_script];
-                let config: &Configure = &self.projects[self.selected_project].get_configures()[self.selected_configure];
+                let script: &Script = &self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_scripts()[self.state_script.cursor];
+                let config: &Configure = &self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor];
 
                 let _ = self.event_bus.0.send(AppEvent::Log(format!("running: {}", script.get_name()), MessageType::Info));
 
@@ -663,7 +639,7 @@ impl Widget for &App
                 if self.active_area == ActiveArea::Project
                 {
                     state.focus();
-                    if i == self.selected_project
+                    if i == self.state_project.cursor
                     {
                         state.highlight();
                     }
@@ -679,13 +655,14 @@ impl Widget for &App
             }
 
             // CONFIGURE LIST
-            let configures: &Vec<Configure> = self.projects[self.selected_project].get_configures();
+            let configures: &Vec<Configure> = self.projects[self.state_project.cursor].get_configures();
             for (i, configure) in configures.iter().enumerate()
             {
                 let mut state: CheckboxState = CheckboxState::new(configure.is_selected());
                 if self.active_area == ActiveArea::Configure
                 {
-                    state.focus(); if i == self.selected_configure
+                    state.focus();
+                    if i == self.state_configure.cursor
                     {
                         state.highlight();
                     }
@@ -701,14 +678,14 @@ impl Widget for &App
             }
 
             // COMPONENT LIST
-            let components: &Vec<objects::Component> = configures[self.selected_configure].get_components();
+            let components: &Vec<objects::Component> = configures[self.state_configure.cursor].get_components();
             for (i, component) in components.iter().enumerate()
             {
                 let mut state: CheckboxState = CheckboxState::new(component.is_selected());
                 if self.active_area == ActiveArea::Component
                 {
                     state.focus();
-                    if i == self.selected_component
+                    if i == self.state_component.cursor
                     {
                         state.highlight();
                     }
@@ -724,7 +701,7 @@ impl Widget for &App
             }
 
             // SCRIPT LIST
-            let scripts: &Vec<Script> = configures[self.selected_configure].get_scripts();
+            let scripts: &Vec<Script> = configures[self.state_configure.cursor].get_scripts();
             for (i, script) in scripts.iter().enumerate()
             {
                 let mut state: CheckboxState = CheckboxState::new(false);
@@ -734,7 +711,7 @@ impl Widget for &App
                 if self.active_area == ActiveArea::Scripts
                 {
                     state.focus();
-                    if i == self.selected_script
+                    if i == self.state_script.cursor
                     {
                         state.data.is_selected = true;
                         state.highlight();
@@ -755,19 +732,23 @@ impl Widget for &App
         let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
         
         // RENDER SUBLAYOUT 0
-        project_group.render(project_block.inner(project_area), buf, &mut CheckboxGroupState { cursor: self.selected_project });
+        let mut state_project: CheckboxGroupState = self.state_project.clone();
+        project_group.render(project_block.inner(project_area), buf, &mut state_project);
         project_block.render(project_area, buf);
 
         // RENDER SUBLAYOUT 1
-        component_group.render(component_block.inner(component_area), buf, &mut CheckboxGroupState { cursor: self.selected_component });
+        let mut state_component: CheckboxGroupState = self.state_component.clone();
+        component_group.render(component_block.inner(component_area), buf, &mut state_component);
         component_block.render(component_area, buf);
 
         // RENDER SUBLAYOUT 2
-        configure_group.render(configure_block.inner(configure_area), buf, &mut CheckboxGroupState { cursor: self.selected_configure });
+        let mut state_configure: CheckboxGroupState = self.state_configure.clone();
+        configure_group.render(configure_block.inner(configure_area), buf, &mut state_configure);
         configure_block.render(configure_area, buf);
 
         // RENDER SUBLAYOUT 3
-        script_group.render(script_block.inner(script_area), buf, &mut CheckboxGroupState { cursor: self.selected_script });
+        let mut state_script: CheckboxGroupState = self.state_script.clone();
+        script_group.render(script_block.inner(script_area), buf, &mut state_script);
         script_block.render(script_area, buf);
 
         // RENDER MAINLAYOUT 0
