@@ -204,6 +204,128 @@ impl App
         });
     }
 
+    fn run_copying(projects: Vec<Project>, tx: mpsc::Sender<AppEvent>)
+    {
+        let _ = tx.send(AppEvent::Log("starting...".into(), MessageType::Info));
+        let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: true }));
+
+        std::thread::spawn(
+            move ||
+            {
+                let mut fallback: bool = true;
+                for project in projects
+                {
+                    if !project.is_selected()
+                    {
+                        continue;
+                    }
+                    let dest_path: &String = project.get_destination();
+
+                    for configure in project.get_configures()
+                    {
+                        if !configure.is_selected()
+                        {
+                            continue;
+                        }
+                        let src_path: &String = configure.get_path();
+
+                        fallback = false;
+
+                        if configure.should_clean()
+                        { 
+                            let _ = tx.send(AppEvent::Log("cleaning components...".into(), MessageType::Info));
+
+                            if let Ok(entries) = fs::read_dir(dest_path)
+                            {
+                                for entry in entries.flatten()
+                                {
+                                    let file_name: String = entry.file_name().to_string_lossy().to_string();
+                                    
+                                    let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
+                                    if !matches_mask
+                                    {
+                                        continue;
+                                    }
+
+                                    for component in configure.get_components()
+                                    {
+                                        if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
+                                        {
+                                            let _ = fs::remove_file(entry.path());
+                                            break; 
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        let mut files_to_copy: Vec<(std::path::PathBuf, String)> = Vec::new();
+                        if let Ok(entries) = fs::read_dir(src_path)
+                        {
+                            for entry in entries.flatten()
+                            {
+                                let file_name: String = entry.file_name().to_string_lossy().to_string();
+
+                                let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
+                                if !matches_mask
+                                {
+                                    continue;
+                                }
+
+                                for component in configure.get_components()
+                                {
+                                    if !component.is_selected()
+                                    {
+                                        continue;
+                                    }
+
+                                    if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
+                                    {
+                                        files_to_copy.push((entry.path(), file_name.clone()));
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            let _ = tx.send(AppEvent::Log(format!("failed to read source directory: '{}'", src_path), MessageType::Warning));
+                        }
+
+                        let copied_total: usize = files_to_copy.len();
+                        let mut copied_count: usize = 0;
+                        if copied_total == 0
+                        {
+                            let _ = tx.send(AppEvent::Log("no files matched the criteria".into(), MessageType::Info));
+                        }
+                        else
+                        {
+                            for (path, file_name) in files_to_copy
+                            {
+                                let to: std::path::PathBuf = std::path::Path::new(dest_path).join(&file_name);
+
+                                if fs::copy(&path, to).is_ok()
+                                {
+                                    copied_count = copied_count.add(1);
+                                    let _ = tx.send(AppEvent::Log(format!("[{}/{}] copying: {}", copied_count, copied_total, file_name), MessageType::Info));
+                                }
+                            }
+
+                            let _ = tx.send(AppEvent::Log(format!("finished copying {}/{}: '{}'", copied_count, copied_total, dest_path), MessageType::Success));
+                        }
+                    }
+                }
+
+                if fallback
+                {
+                    let _ = tx.send(AppEvent::Log("no project or configure selected, nothing was done".into(), MessageType::Warning));
+                }
+
+                let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: false }));
+            }
+        );
+    }
+
     fn handle_updates(&mut self)
     {
         while let Ok(event) = self.event_bus.1.try_recv()
@@ -482,127 +604,7 @@ impl App
 
     fn ok(&mut self)
     {
-        let projects: Vec<Project> = self.projects.clone();
-
-        let tx: mpsc::Sender<AppEvent> = self.event_bus.0.clone();
-        let _ = tx.send(AppEvent::Log("starting...".into(), MessageType::Info));
-        let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: true }));
-
-        std::thread::spawn(
-            move ||
-            {
-                let mut fallback: bool = true;
-                for project in projects
-                {
-                    if !project.is_selected()
-                    {
-                        continue;
-                    }
-                    let dest_path: &String = project.get_destination();
-
-                    for configure in project.get_configures()
-                    {
-                        if !configure.is_selected()
-                        {
-                            continue;
-                        }
-                        let src_path: &String = configure.get_path();
-
-                        fallback = false;
-
-                        if configure.should_clean()
-                        { 
-                            let _ = tx.send(AppEvent::Log("cleaning components...".into(), MessageType::Info));
-
-                            if let Ok(entries) = fs::read_dir(dest_path)
-                            {
-                                for entry in entries.flatten()
-                                {
-                                    let file_name: String = entry.file_name().to_string_lossy().to_string();
-                                    
-                                    let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
-                                    if !matches_mask
-                                    {
-                                        continue;
-                                    }
-
-                                    for component in configure.get_components()
-                                    {
-                                        if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
-                                        {
-                                            let _ = fs::remove_file(entry.path());
-                                            break; 
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        let mut files_to_copy: Vec<(std::path::PathBuf, String)> = Vec::new();
-                        if let Ok(entries) = fs::read_dir(src_path)
-                        {
-                            for entry in entries.flatten()
-                            {
-                                let file_name: String = entry.file_name().to_string_lossy().to_string();
-
-                                let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
-                                if !matches_mask
-                                {
-                                    continue;
-                                }
-
-                                for component in configure.get_components()
-                                {
-                                    if !component.is_selected()
-                                    {
-                                        continue;
-                                    }
-
-                                    if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
-                                    {
-                                        files_to_copy.push((entry.path(), file_name.clone()));
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        else
-                        {
-                            let _ = tx.send(AppEvent::Log(format!("failed to read source directory: '{}'", src_path), MessageType::Warning));
-                        }
-
-                        let copied_total: usize = files_to_copy.len();
-                        let mut copied_count: usize = 0;
-                        if copied_total == 0
-                        {
-                            let _ = tx.send(AppEvent::Log("no files matched the criteria".into(), MessageType::Info));
-                        }
-                        else
-                        {
-                            for (path, file_name) in files_to_copy
-                            {
-                                let to = std::path::Path::new(dest_path).join(&file_name);
-
-                                if fs::copy(&path, to).is_ok()
-                                {
-                                    copied_count = copied_count.add(1);
-                                    let _ = tx.send(AppEvent::Log(format!("[{}/{}] copying: {}", copied_count, copied_total, file_name), MessageType::Info));
-                                }
-                            }
-
-                            let _ = tx.send(AppEvent::Log(format!("finished copying {}/{}: '{}'", copied_count, copied_total, dest_path), MessageType::Success));
-                        }
-                    }
-                }
-
-                if fallback
-                {
-                    let _ = tx.send(AppEvent::Log("no project or configure selected, nothing was done".into(), MessageType::Warning));
-                }
-
-                let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: false }));
-            }
-        );
+        Self::run_copying(self.projects.clone(), self.event_bus.0.clone());
     }
 }
 
