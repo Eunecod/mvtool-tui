@@ -13,7 +13,7 @@ mod ui;
 mod updater;
 
 use std::{ fs, io, ops::Add, process::Command };
-use crossterm::event::{ self, Event, KeyCode, KeyEventKind };
+use crossterm::event::{ self, Event, KeyCode, KeyModifiers, KeyEventKind };
 use ratatui::{ DefaultTerminal, Frame, buffer::Buffer, layout::{ Alignment, Constraint, Layout, Rect }, style::{ Color, Modifier, Style, Stylize }, symbols::border, text::Line, widgets::{ Block, Padding, Paragraph, StatefulWidget, Widget } };
 use serde_json::Value;
 use ui::checkbox::layout::LayoutCheckboxGroup;
@@ -21,7 +21,7 @@ use ui::checkbox::{ Checkbox, CheckboxState, HorizontalCheckboxGroup, VerticalCh
 use ui::messagelog::{ MessageLog, MessageType };
 use ui::messagebox::MessageBox;
 use ui::spin::{ Spin, SpinState };
-use objects::{ Project, Script, Configure };
+use objects::{ Project, Script, Configure, Component };
 use utils::Utils;
 use updater::{ Updater, ReleaseUpdateGithub };
 
@@ -407,17 +407,24 @@ impl App
         
             match key.code
             {
-                KeyCode::Up         => self.move_selection(-1),
-                KeyCode::Down       => self.move_selection(1),
-                KeyCode::Left       => self.move_project(-1),
-                KeyCode::Right      => self.move_project(1),
-                KeyCode::Char(' ')  => self.on_action(),
-                KeyCode::Tab        => self.next_area(true),
-                KeyCode::BackTab    => self.next_area(false),
-                KeyCode::F(1)       if !self.spin.state.procces => self.ok(),
-                KeyCode::Esc        if !self.spin.state.procces => self.exit = true,
+                KeyCode::Up        => self.move_selection(-1),
+                KeyCode::Down      => self.move_selection(1),
+                KeyCode::Left      => self.move_project(-1),
+                KeyCode::Right     => self.move_project(1),
+                KeyCode::Char(' ') => self.on_action(),
+                KeyCode::Tab       => self.next_area(true),
+                KeyCode::BackTab   => self.next_area(false),
+                KeyCode::F(1)      if !self.spin.state.procces => self.ok(),
+                KeyCode::Esc       if !self.spin.state.procces => self.exit = true,
 
-                _ => {}
+                _ => { }
+            }
+
+            match (key.code, key.modifiers)
+            {
+                (KeyCode::Char('a' | 'A' | 'ф' | 'Ф'), KeyModifiers::CONTROL) => self.select_all(),
+
+                _ => { }
             }
         }
 
@@ -578,6 +585,30 @@ impl App
         }
     }
 
+    fn select_all(&mut self)
+    {
+        match self.active_area
+        {
+            ActiveArea::Component =>
+            {
+                if self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_components().is_empty()
+                {
+                    return;
+                }
+
+                self.projects[self.state_project.cursor].get_configures_mut()[self.state_configure.cursor]
+                .get_components_mut().iter_mut().for_each(
+                    |configure: &mut Component|
+                    {
+                        configure.set_selected(true);
+                    }
+                );
+            }
+
+            _ => { }
+        }
+    }
+
     fn ok(&mut self)
     {
         Self::run_copying(self.projects.clone(), self.event_bus.0.clone());
@@ -623,6 +654,7 @@ impl Widget for &App
                 [
                     " F1 ".black().on_gray(), " Run ".gray(),
                     " Space ".black().on_gray(), " Toggle ".gray(),
+                    " ^ + a ".black().on_gray(), " Select All ".gray(),
                     " Tab ".black().on_gray(), " Next Area ".gray(),
                     " ▲ ▼ ".black().on_gray(), " Move ".gray(),
                     " Esc ".black().on_gray(), " Exit ".gray(),
