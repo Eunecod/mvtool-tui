@@ -13,4 +13,9 @@ impl Utils
 
         return target_name == file_stem.as_ref() && (extension_mask.is_empty() || extension_mask.iter().any(|ext| ext == extension.as_ref()));
     }
+
+    pub fn get_bit_depth() -> String
+    {
+        return if cfg!(target_pointer_width = "64") { "64-bit".into() } else { "32-bit".into() };
+    }
 }
