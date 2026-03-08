@@ -1,11 +1,13 @@
 // src/main.rs
 
-//   /$$$$$$  /$$$$$$$   /$$$$$$   /$$$$$$  | 
-//  /$$__  $$| $$__  $$ /$$__  $$ /$$__  $$ | [esud] mvtool v1.3.0
-// | $$$$$$$$| $$$$$$$/| $$  | $$| $$$$$$$$ | 30/01/2025
-// | $$  | $$| $$  | $$|  $$$$$$/| $$  | $$ | 
-// |__/  |__/|__/  |__/ \____ $$$|__/  |__/ | Лецензии нет делай все что хочешь форкай не форкай копипасти ломай строй и т.д. :)
-//                            \__/          |   
+//                        888                     888 | 
+//                        888                     888 | 
+//                        888                     888 | [esud] mvtool
+// 88888b.d88b.  888  888 888888 .d88b.   .d88b.  888 | 30/01/2026
+// 888 '888 '88b 888  888 888   d88''88b d88''88b 888 | 
+// 888  888  888 Y88  88P 888   888  888 888  888 888 | Лицензия: MIT / Apache 2.0
+// 888  888  888  Y8bd8P  Y88b. Y88..88P Y88..88P 888 | 
+// 888  888  888   Y88P    'Y888 'Y88P'   'Y88P'  888 |   
 
 mod objects;
 mod utils;
@@ -13,15 +15,15 @@ mod ui;
 mod updater;
 
 use std::{ fs, io, ops::Add, process::Command };
-use crossterm::event::{ self, Event, KeyCode, KeyEventKind };
-use ratatui::{ DefaultTerminal, Frame, buffer::Buffer, layout::{ Alignment, Constraint, Layout, Rect }, style::{ Color, Modifier, Style, Stylize }, symbols::border, text::Line, widgets::{ Block, Padding, Paragraph, StatefulWidget, Widget } };
+use crossterm::event::{ self, Event, KeyCode, KeyModifiers, KeyEventKind };
+use ratatui::{ DefaultTerminal, Frame, buffer::Buffer, layout::{ Alignment, Constraint, Layout, Rect }, style::{ Color, Modifier, Style, Stylize }, symbols::border, text::{ Line, Span }, widgets::{ Block, Padding, Paragraph, StatefulWidget, Widget } };
 use serde_json::Value;
 use ui::checkbox::layout::LayoutCheckboxGroup;
 use ui::checkbox::{ Checkbox, CheckboxState, HorizontalCheckboxGroup, VerticalCheckboxGroup, CheckboxGroupState };
 use ui::messagelog::{ MessageLog, MessageType };
 use ui::messagebox::MessageBox;
 use ui::spin::{ Spin, SpinState };
-use objects::{ Project, Script, Configure };
+use objects::{ Project, Script, Configure, Component };
 use utils::Utils;
 use updater::{ Updater, ReleaseUpdateGithub };
 
@@ -41,6 +43,13 @@ enum ActiveArea
     Scripts,
 }
 
+#[derive(Default)]
+enum ActiveView
+{
+    #[default] MainView,
+    AboutView,
+}
+
 pub enum AppEvent
 {
     UpdateAvailable(ReleaseUpdateGithub),
@@ -54,11 +63,12 @@ pub struct App
     
     message_box: Option<MessageBox<'static>>,
     projects: Vec<Project>,
-    selected_project: usize,
-    selected_configure: usize,
-    selected_component: usize,
-    selected_script: usize,
+    state_project: CheckboxGroupState,
+    state_configure: CheckboxGroupState,
+    state_component: CheckboxGroupState,
+    state_script: CheckboxGroupState,
     active_area: ActiveArea,
+    active_view: ActiveView,
     message_log: MessageLog,
     spin: Spin,
     exit: bool,
@@ -74,11 +84,12 @@ impl Default for App
             
             message_box: None,
             projects: Vec::new(),
-            selected_project: 0,
-            selected_configure: 0,
-            selected_component: 0,
-            selected_script: 0,
+            state_project: CheckboxGroupState::default(),
+            state_configure: CheckboxGroupState::default(),
+            state_component: CheckboxGroupState::default(),
+            state_script: CheckboxGroupState::default(),
             active_area: ActiveArea::Project,
+            active_view: ActiveView::MainView,
             message_log: MessageLog::new(),
             spin: Spin::new(SpinState::new(0, false)),
             exit: false,
@@ -204,287 +215,8 @@ impl App
         });
     }
 
-    fn handle_updates(&mut self)
+    fn run_copying(projects: Vec<Project>, tx: mpsc::Sender<AppEvent>)
     {
-        while let Ok(event) = self.event_bus.1.try_recv()
-        {
-            match event
-            {
-                AppEvent::UpdateAvailable(state) =>
-                {
-                    if state.is_available
-                    {
-                        let tx: mpsc::Sender<AppEvent> = self.event_bus.0.clone();
-                        self.message_box = Some(MessageBox::new("[ update ]", 
-                            vec![
-                                Line::from("New version available!".bold()).alignment(Alignment::Center),
-                                Line::from(""),
-                                Line::from(format!("current version: v.{}", state.version_current)).alignment(Alignment::Center),
-                                Line::from(format!("new version: v.{}", state.version_new)).alignment(Alignment::Center),
-                            ].into()
-                            )
-                            .with_size(50, 25)
-                            .set_accept(
-                                {
-                                    move || { Self::run_update(tx.clone()); }
-                                } 
-                            )
-                        );
-                    }
-                }
-                AppEvent::WaitProcess(state) =>
-                {
-                    self.spin.state = state;
-                }
-                AppEvent::Log(message, message_type) =>
-                {
-                    self.message_log.add_message(message, message_type);
-                }
-            }
-        }
-    }
-
-    fn draw(&self, frame: &mut Frame)
-    {
-        self.render(frame.area(), frame.buffer_mut());
-    }
-
-    fn area_style(&self, area: ActiveArea) -> Style
-    {
-        if self.active_area == area
-        {
-            return Style::default().fg(Color::White);
-        }
-        else
-        {
-            return Style::default().fg(Color::DarkGray);
-        }
-    }
-
-    fn handle_events(&mut self) -> io::Result<()>
-    {
-        if let Event::Key(key) = event::read()?
-        {
-            if key.kind != KeyEventKind::Press
-            {
-                return Ok(());
-            }
-
-            if let Some(message_box) = self.message_box.take()
-            {
-                match key.code
-                {
-                    KeyCode::Enter => message_box.accept(),
-                    KeyCode::Esc   => message_box.reject(),
-
-                    _ => { self.message_box = Some(message_box); }
-                }
-
-                return Ok(());
-            }
-        
-            match key.code
-            {
-                KeyCode::Up         => self.move_selection(-1),
-                KeyCode::Down       => self.move_selection(1),
-                KeyCode::Left       => self.move_project(-1),
-                KeyCode::Right      => self.move_project(1),
-                KeyCode::Char(' ')  => self.on_action(),
-                KeyCode::Tab        => self.next_area(true),
-                KeyCode::BackTab    => self.next_area(false),
-                KeyCode::F(1)       if !self.spin.state.procces => self.ok(),
-                KeyCode::Esc        if !self.spin.state.procces => self.exit = true,
-
-                _ => {}
-            }
-        }
-
-        return Ok(());
-    }
-
-    fn move_selection(&mut self, delta: i32)
-    {
-        match self.active_area
-        {
-            ActiveArea::Configure =>
-            {
-                let len: usize = self.projects[self.selected_project].get_configures().len();
-                if len == 0
-                {
-                    return;
-                }
-
-                self.selected_configure = (self.selected_configure as i32 + delta).clamp(0, len as i32 - 1) as usize;
-            }
-            ActiveArea::Component =>
-            {
-                let len: usize = self.projects[self.selected_project].get_configures()[self.selected_configure].get_components().len();
-                if len == 0
-                {
-                    return;
-                }
-
-                self.selected_component = (self.selected_component as i32 + delta).clamp(0, len as i32 - 1) as usize;
-            }
-            ActiveArea::Scripts =>
-            {
-                let len: usize = self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts().len();
-                if len == 0
-                {
-                    return;
-                }
-
-                self.selected_script = (self.selected_script as i32 + delta).clamp(0, len as i32 - 1) as usize;
-            }
-
-            _ => {}
-        }
-    }
-
-    fn move_project(&mut self, delta: i32)
-    {
-        if self.active_area == ActiveArea::Project && !self.projects.is_empty()
-        {
-            self.selected_project = (self.selected_project as i32 + delta).clamp(0, self.projects.len() as i32 - 1) as usize;
-            self.selected_configure = 0;
-        }
-    }
-
-    fn get_selected_current_project(&self) -> usize
-    {
-        for (i, project) in self.projects.iter().enumerate()
-        {
-            if project.is_selected()
-            {
-                return i;
-            }
-        }
-
-        return 0 as usize;
-    }
-
-    fn get_selected_current_configure(&self) -> usize
-    {
-        for (i, configure) in self.projects[self.selected_project].get_configures().iter().enumerate()
-        {
-            if configure.is_selected()
-            {
-                return i;
-            }
-        }
-
-        return 0 as usize;
-    }
-
-    fn next_area(&mut self, forward: bool)
-    {
-        match self.active_area
-        {
-            ActiveArea::Project =>
-            {
-                self.selected_project = self.get_selected_current_project();
-            }
-            ActiveArea::Configure =>
-            {
-                self.selected_configure = self.get_selected_current_configure();
-            }
-        
-            _ => {}
-        }
-
-        self.active_area = match (self.active_area, forward)
-        {
-            (ActiveArea::Project, true)    => ActiveArea::Configure,
-            (ActiveArea::Configure, true)  => ActiveArea::Component,
-            (ActiveArea::Component, true)  => ActiveArea::Scripts,
-            (ActiveArea::Scripts, true)    => ActiveArea::Project,
-            (ActiveArea::Project, false)   => ActiveArea::Scripts,
-            (ActiveArea::Scripts, false)   => ActiveArea::Component,
-            (ActiveArea::Component, false) => ActiveArea::Configure,
-            (ActiveArea::Configure, false) => ActiveArea::Project,
-        };
-    }
-
-    fn on_action(&mut self)
-    {
-        match self.active_area
-        {
-            ActiveArea::Project =>
-            {
-                if self.projects.is_empty()
-                {
-                    return;
-                }
-
-                let selected: bool = self.projects[self.selected_project].is_selected();
-                self.projects.iter_mut().for_each(
-                    |project: &mut Project|
-                    {
-                        project.set_selected(false);
-                    }
-                );
-                self.projects[self.selected_project].set_selected(!selected);
-            }
-            ActiveArea::Configure =>
-            {
-                if self.projects[self.selected_project].get_configures().is_empty()
-                {
-                    return;
-                }
-
-                let project: &mut Project = &mut self.projects[self.selected_project];
-                
-                let selected: bool = project.get_configures()[self.selected_configure].is_selected();
-                project.get_configures_mut().iter_mut().for_each(|configure: &mut Configure| { configure.set_selected(false); });
-                project.get_configures_mut()[self.selected_configure].set_selected(!selected);
-            }
-            ActiveArea::Component =>
-            {
-                if self.projects[self.selected_project].get_configures()[self.selected_configure].get_components().is_empty()
-                {
-                    return;
-                }
-
-                let component: &mut objects::Component = &mut self.projects[self.selected_project].get_configures_mut()[self.selected_configure].get_components_mut()[self.selected_component];
-                component.set_selected(!component.is_selected());
-            }
-            ActiveArea::Scripts =>
-            {
-                if self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts().is_empty()
-                {
-                    return;
-                }
-
-                let script: &Script = &self.projects[self.selected_project].get_configures()[self.selected_configure].get_scripts()[self.selected_script];
-                let config: &Configure = &self.projects[self.selected_project].get_configures()[self.selected_configure];
-
-                let _ = self.event_bus.0.send(AppEvent::Log(format!("running: {}", script.get_name()), MessageType::Info));
-
-                let status: Result<std::process::ExitStatus, io::Error> = Command::new("cmd").args(
-                    ["/C", "start", format!("mvtool: {}", script.get_name()).as_str(), "cmd", "/K", script.get_command()]).current_dir(config.get_path()
-                ).status();
-
-                match status
-                {
-                    Ok(stat)
-                    if stat.success() =>
-                    {
-                        let _ = self.event_bus.0.send(AppEvent::Log(format!("executed script: {}", script.get_name()), MessageType::Success));
-                    }
-                    _ =>
-                    {
-                        let _ = self.event_bus.0.send(AppEvent::Log(format!("failed to run or script error: {}", script.get_name()), MessageType::Error));
-                    }
-                }
-            }
-        }
-    }
-
-    fn ok(&mut self)
-    {
-        let projects: Vec<Project> = self.projects.clone();
-
-        let tx: mpsc::Sender<AppEvent> = self.event_bus.0.clone();
         let _ = tx.send(AppEvent::Log("starting...".into(), MessageType::Info));
         let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: true }));
 
@@ -581,7 +313,7 @@ impl App
                         {
                             for (path, file_name) in files_to_copy
                             {
-                                let to = std::path::Path::new(dest_path).join(&file_name);
+                                let to: std::path::PathBuf = std::path::Path::new(dest_path).join(&file_name);
 
                                 if fs::copy(&path, to).is_ok()
                                 {
@@ -604,181 +336,557 @@ impl App
             }
         );
     }
+
+    fn handle_updates(&mut self)
+    {
+        while let Ok(event) = self.event_bus.1.try_recv()
+        {
+            match event
+            {
+                AppEvent::UpdateAvailable(state) =>
+                {
+                    if state.is_available
+                    {
+                        let tx: mpsc::Sender<AppEvent> = self.event_bus.0.clone();
+                        self.message_box = Some(MessageBox::new("[ update ]", 
+                            vec![
+                                Line::from("New version available!".bold()).alignment(Alignment::Center),
+                                Line::from(""),
+                                Line::from(format!("current version: v.{}", state.version_current)).alignment(Alignment::Center),
+                                Line::from(format!("new version: v.{}", state.version_new)).alignment(Alignment::Center),
+                            ].into()
+                            )
+                            .with_size(50, 25)
+                            .set_accept(
+                                {
+                                    move || { Self::run_update(tx.clone()); }
+                                } 
+                            )
+                        );
+                    }
+                }
+                AppEvent::WaitProcess(state) =>
+                {
+                    self.spin.state = state;
+                }
+                AppEvent::Log(message, message_type) =>
+                {
+                    self.message_log.add_message(message, message_type);
+                }
+            }
+        }
+    }
+
+    fn draw(&self, frame: &mut Frame)
+    {
+        self.render(frame.area(), frame.buffer_mut());
+    }
+
+    fn area_style(&self, area: ActiveArea) -> Style
+    {
+        if self.active_area == area
+        {
+            return Style::default().fg(Color::White);
+        }
+        else
+        {
+            return Style::default().fg(Color::DarkGray);
+        }
+    }
+
+    fn handle_events(&mut self) -> io::Result<()>
+    {
+        if let Event::Key(key) = event::read()?
+        {
+            if key.kind != KeyEventKind::Press
+            {
+                return Ok(());
+            }
+
+            if let Some(message_box) = self.message_box.take()
+            {
+                match key.code
+                {
+                    KeyCode::Enter => message_box.accept(),
+                    KeyCode::Esc   => message_box.reject(),
+
+                    _ => { self.message_box = Some(message_box); }
+                }
+
+                return Ok(());
+            }
+        
+            match key.code
+            {
+                KeyCode::Up        => self.move_selection(-1),
+                KeyCode::Down      => self.move_selection(1),
+                KeyCode::Left      => self.move_project(-1),
+                KeyCode::Right     => self.move_project(1),
+                KeyCode::Char(' ') => self.on_action(),
+                KeyCode::Tab       => self.next_area(true),
+                KeyCode::BackTab   => self.next_area(false),
+                KeyCode::F(1)      if !self.spin.state.procces => self.ok(),
+                KeyCode::F(2)      =>
+                {
+                    match self.active_view
+                    {
+                        ActiveView::MainView => self.active_view = ActiveView::AboutView,
+                        ActiveView::AboutView => self.active_view = ActiveView::MainView,   
+                    }
+                }
+                KeyCode::Esc       if !self.spin.state.procces => self.exit = true,
+
+                _ => { }
+            }
+
+            match (key.code, key.modifiers)
+            {
+                (KeyCode::Char('a' | 'A' | 'ф' | 'Ф'), KeyModifiers::CONTROL) => self.select_all(),
+
+                _ => { }
+            }
+        }
+
+        return Ok(());
+    }
+
+    fn move_selection(&mut self, delta: i32)
+    {
+        match self.active_area
+        {
+            ActiveArea::Configure =>
+            {
+                let len: usize = self.projects[self.state_project.cursor].get_configures().len();
+                if len == 0
+                {
+                    return;
+                }
+
+                self.state_configure.cursor = (self.state_configure.cursor as i32 + delta).clamp(0, len as i32 - 1) as usize;
+            }
+            ActiveArea::Component =>
+            {
+                let len: usize = self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_components().len();
+                if len == 0
+                {
+                    return;
+                }
+
+                self.state_component.cursor = (self.state_component.cursor as i32 + delta).clamp(0, len as i32 - 1) as usize;
+            }
+            ActiveArea::Scripts =>
+            {
+                let len: usize = self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_scripts().len();
+                if len == 0
+                {
+                    return;
+                }
+
+                self.state_script.cursor = (self.state_script.cursor as i32 + delta).clamp(0, len as i32 - 1) as usize;
+            }
+
+            _ => {}
+        }
+    }
+
+    fn move_project(&mut self, delta: i32)
+    {
+        if self.active_area == ActiveArea::Project && !self.projects.is_empty()
+        {
+            self.state_project.cursor = (self.state_project.cursor as i32 + delta).clamp(0, self.projects.len() as i32 - 1) as usize;
+            self.state_configure.cursor = 0;
+        }
+    }
+
+    fn next_area(&mut self, forward: bool)
+    {
+        match self.active_area
+        {
+            ActiveArea::Project =>
+            {
+                self.state_project.cursor = self.state_project.selected;
+            }
+            ActiveArea::Configure =>
+            {
+                self.state_configure.cursor = self.state_configure.selected;
+            }
+        
+            _ => {}
+        }
+
+        self.active_area = match (self.active_area, forward)
+        {
+            (ActiveArea::Project, true)    => ActiveArea::Configure,
+            (ActiveArea::Configure, true)  => ActiveArea::Component,
+            (ActiveArea::Component, true)  => ActiveArea::Scripts,
+            (ActiveArea::Scripts, true)    => ActiveArea::Project,
+            (ActiveArea::Project, false)   => ActiveArea::Scripts,
+            (ActiveArea::Scripts, false)   => ActiveArea::Component,
+            (ActiveArea::Component, false) => ActiveArea::Configure,
+            (ActiveArea::Configure, false) => ActiveArea::Project,
+        };
+    }
+
+    fn on_action(&mut self)
+    {
+        match self.active_area
+        {
+            ActiveArea::Project =>
+            {
+                if self.projects.is_empty()
+                {
+                    return;
+                }
+
+                self.state_project.selected = self.state_project.cursor;
+                let selected: bool = self.projects[self.state_project.cursor].is_selected();
+                self.projects.iter_mut().for_each(
+                    |project: &mut Project|
+                    {
+                        project.set_selected(false);
+                    }
+                );
+                self.projects[self.state_project.cursor].set_selected(!selected);
+            }
+            ActiveArea::Configure =>
+            {
+                if self.projects[self.state_project.cursor].get_configures().is_empty()
+                {
+                    return;
+                }
+                
+                let project: &mut Project = &mut self.projects[self.state_project.cursor];
+                
+                self.state_configure.selected = self.state_configure.cursor;
+                let selected: bool = project.get_configures()[self.state_configure.cursor].is_selected();
+                project.get_configures_mut().iter_mut().for_each(|configure: &mut Configure| { configure.set_selected(false); });
+                project.get_configures_mut()[self.state_configure.cursor].set_selected(!selected);
+            }
+            ActiveArea::Component =>
+            {
+                if self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_components().is_empty()
+                {
+                    return;
+                }
+
+                let component: &mut objects::Component = &mut self.projects[self.state_project.cursor].get_configures_mut()[self.state_configure.cursor].get_components_mut()[self.state_component.cursor];
+                component.set_selected(!component.is_selected());
+            }
+            ActiveArea::Scripts =>
+            {
+                if self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_scripts().is_empty()
+                {
+                    return;
+                }
+
+                let script: &Script = &self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_scripts()[self.state_script.cursor];
+                let config: &Configure = &self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor];
+
+                let _ = self.event_bus.0.send(AppEvent::Log(format!("running: {}", script.get_name()), MessageType::Info));
+
+                let status: Result<std::process::ExitStatus, io::Error> = Command::new("cmd").args(
+                    ["/C", "start", format!("mvtool: {}", script.get_name()).as_str(), "cmd", "/K", script.get_command()]).current_dir(config.get_path()
+                ).status();
+
+                match status
+                {
+                    Ok(stat)
+                    if stat.success() =>
+                    {
+                        let _ = self.event_bus.0.send(AppEvent::Log(format!("executed script: {}", script.get_name()), MessageType::Success));
+                    }
+                    _ =>
+                    {
+                        let _ = self.event_bus.0.send(AppEvent::Log(format!("failed to run or script error: {}", script.get_name()), MessageType::Error));
+                    }
+                }
+            }
+        }
+    }
+
+    fn select_all(&mut self)
+    {
+        match self.active_area
+        {
+            ActiveArea::Component =>
+            {
+                if self.projects[self.state_project.cursor].get_configures()[self.state_configure.cursor].get_components().is_empty()
+                {
+                    return;
+                }
+
+                self.projects[self.state_project.cursor].get_configures_mut()[self.state_configure.cursor]
+                .get_components_mut().iter_mut().for_each(
+                    |configure: &mut Component|
+                    {
+                        configure.set_selected(true);
+                    }
+                );
+            }
+
+            _ => { }
+        }
+    }
+
+    fn ok(&mut self)
+    {
+        Self::run_copying(self.projects.clone(), self.event_bus.0.clone());
+    }
 }
 
 impl Widget for &App
 {
     fn render(self, area: Rect, buf: &mut Buffer)
     {
-        let [project_area, middle_area, console_area, bottom_bar_area] = Layout::vertical([
-            Constraint::Length(6),
-            Constraint::Min(1),
-            Constraint::Length(5),
-            Constraint::Length(1),
-        ]).areas(area);
-
-        let [side_area, component_area] = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(middle_area);
-        let [configure_area, script_area] = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(side_area);
-
-        // PROJECT LIST
-        let mut project_group: HorizontalCheckboxGroup<'_> = HorizontalCheckboxGroup::new();
-        let project_block: Block<'_> = Block::bordered().title("[ projects ] - use ← → to navigate ".bold()).border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Project)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
-
-        // CONFIGURE LIST
-        let mut configure_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        let configure_block: Block<'_> = Block::bordered().title("[ configure ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
-
-        // COMPONENT LIST
-        let mut component_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        let component_block: Block<'_> = Block::bordered().title("[ components ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
-        
-        // SCRIPT LIST
-        let mut script_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
-        let script_block: Block<'_> = Block::bordered().title("[ scripts ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Scripts)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
-
-        // CONSOLE
-        let console_block: Block<'_> = Block::bordered().title(format!("[ console {}]", &mut self.spin.get_frame())).border_set(border::ROUNDED).padding(Padding { left: 1, right: 0, top: 1, bottom: 1 });
-
-        // BOTTOM BAR
-        let bottom_bar_help_menu: Paragraph<'_> = Paragraph::new(
-            Line::from(vec!
-                [
-                    " F1 ".black().on_gray(), " Run ".gray(),
-                    " Space ".black().on_gray(), " Toggle ".gray(),
-                    " Tab ".black().on_gray(), " Next Area ".gray(),
-                    " ▲ ▼ ".black().on_gray(), " Move ".gray(),
-                    " Esc ".black().on_gray(), " Exit ".gray(),
-                ]
-        )).style(Style::default().bg(Color::Reset)).alignment(ratatui::layout::Alignment::Left);
-        let bottom_bar_version: Paragraph<'_> = Paragraph::new(" [esud] mvtool v1.3.0 ".gray()).alignment(ratatui::layout::Alignment::Right);
-
-        if !self.projects.is_empty()
+        match self.active_view
         {
-            // PROJECT LIST
-            for (i, project) in self.projects.iter().enumerate()
+            ActiveView::MainView =>
             {
-                let mut state: CheckboxState = CheckboxState::new(project.is_selected());
-                if self.active_area == ActiveArea::Project
+                let [project_area, middle_area, console_area, bottom_bar_area] = Layout::vertical([
+                    Constraint::Length(6),
+                    Constraint::Min(1),
+                    Constraint::Length(5),
+                    Constraint::Length(1),
+                ]).areas(area);
+                    
+                let [side_area, component_area] = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(middle_area);
+                let [configure_area, script_area] = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(side_area);
+                    
+                // PROJECT LIST
+                let mut project_group: HorizontalCheckboxGroup<'_> = HorizontalCheckboxGroup::new();
+                let project_block: Block<'_> = Block::bordered().title("[ projects ] - use ← → to navigate ".bold()).border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Project)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
+                    
+                // CONFIGURE LIST
+                let mut configure_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
+                let configure_block: Block<'_> = Block::bordered().title("[ configure ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
+                    
+                // COMPONENT LIST
+                let mut component_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
+                let component_block: Block<'_> = Block::bordered().title("[ components ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
+                    
+                // SCRIPT LIST
+                let mut script_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
+                let script_block: Block<'_> = Block::bordered().title("[ scripts ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Scripts)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
+                    
+                // CONSOLE
+                let console_block: Block<'_> = Block::bordered().title(format!("[ console {}]", &mut self.spin.get_frame())).border_set(border::ROUNDED).padding(Padding { left: 1, right: 0, top: 1, bottom: 1 });
+            
+                // BOTTOM BAR
+                let bottom_bar_help_menu: Paragraph<'_> = Paragraph::new(
+                Line::from(vec!
+                    [
+                        " F1 ".black().on_gray(), " Run ".gray(),
+                        " Space ".black().on_gray(), " Toggle ".gray(),
+                        " ^ + a ".black().on_gray(), " Select All ".gray(),
+                        " Tab ".black().on_gray(), " Next Area ".gray(),
+                        " ▲ ▼ ".black().on_gray(), " Move ".gray(),
+                        " Esc ".black().on_gray(), " Exit ".gray(),
+                    ]
+                )).style(Style::default().bg(Color::Reset)).alignment(ratatui::layout::Alignment::Left);
+                let bottom_bar_version: Paragraph<'_> = Paragraph::new(format!(" [esud] mvtool v{}", env!("CARGO_PKG_VERSION")).gray()).alignment(ratatui::layout::Alignment::Right);
+                    
+                if !self.projects.is_empty()
                 {
-                    state.focus();
-                    if i == self.selected_project
+                    // PROJECT LIST
+                    for (i, project) in self.projects.iter().enumerate()
                     {
-                        state.highlight();
+                        let mut state: CheckboxState = CheckboxState::new(project.is_selected());
+                        if self.active_area == ActiveArea::Project
+                        {
+                            state.focus();
+                            if i == self.state_project.cursor
+                            {
+                                state.highlight();
+                            }
+                        }  
+                    
+                        project_group.add_checkbox(
+                            {
+                                let mut checkbox: Checkbox<'_> = Checkbox::new(project.get_name());
+                                checkbox.set_state(state);
+                                checkbox
+                            }
+                        );
                     }
-                }  
-
-                project_group.add_checkbox(
+                
+                    // CONFIGURE LIST
+                    let configures: &Vec<Configure> = self.projects[self.state_project.cursor].get_configures();
+                    for (i, configure) in configures.iter().enumerate()
                     {
-                        let mut checkbox: Checkbox<'_> = Checkbox::new(project.get_name());
-                        checkbox.set_state(state);
-                        checkbox
+                        let mut state: CheckboxState = CheckboxState::new(configure.is_selected());
+                        if self.active_area == ActiveArea::Configure
+                        {
+                            state.focus();
+                            if i == self.state_configure.cursor
+                            {
+                                state.highlight();
+                            }
+                        }
+
+                        configure_group.add_checkbox(
+                            {
+                                let mut checkbox: Checkbox<'_> = Checkbox::new(configure.get_name());
+                                checkbox.set_state(state);
+                                checkbox
+                            }
+                        );
                     }
-                );
-            }
-
-            // CONFIGURE LIST
-            let configures: &Vec<Configure> = self.projects[self.selected_project].get_configures();
-            for (i, configure) in configures.iter().enumerate()
-            {
-                let mut state: CheckboxState = CheckboxState::new(configure.is_selected());
-                if self.active_area == ActiveArea::Configure
-                {
-                    state.focus(); if i == self.selected_configure
+                
+                    // COMPONENT LIST
+                    let components: &Vec<objects::Component> = configures[self.state_configure.cursor].get_components();
+                    for (i, component) in components.iter().enumerate()
                     {
-                        state.highlight();
+                        let mut state: CheckboxState = CheckboxState::new(component.is_selected());
+                        if self.active_area == ActiveArea::Component
+                        {
+                            state.focus();
+                            if i == self.state_component.cursor
+                            {
+                                state.highlight();
+                            }
+                        }
+
+                        component_group.add_checkbox(
+                            {
+                                let mut checkbox: Checkbox<'_> = Checkbox::new(component.get_name());
+                                checkbox.set_state(state);
+                                checkbox
+                            }
+                        );
+                    }
+                
+                    // SCRIPT LIST
+                    let scripts: &Vec<Script> = configures[self.state_configure.cursor].get_scripts();
+                    for (i, script) in scripts.iter().enumerate()
+                    {
+                        let mut state: CheckboxState = CheckboxState::new(false);
+                        state.data.symbols = Some(("", "→"));
+                        state.data.style_highlighted = Some(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+
+                        if self.active_area == ActiveArea::Scripts
+                        {
+                            state.focus();
+                            if i == self.state_script.cursor
+                            {
+                                state.data.is_selected = true;
+                                state.highlight();
+                            }
+                        }
+
+                        script_group.add_checkbox(
+                            {
+                                let mut checkbox: Checkbox<'_> = Checkbox::new(script.get_name());
+                                checkbox.set_state(state);
+                                checkbox
+                            }
+                        );
                     }
                 }
-
-                configure_group.add_checkbox(
-                    {
-                        let mut checkbox: Checkbox<'_> = Checkbox::new(configure.get_name());
-                        checkbox.set_state(state);
-                        checkbox
-                    }
-                );
-            }
-
-            // COMPONENT LIST
-            let components: &Vec<objects::Component> = configures[self.selected_configure].get_components();
-            for (i, component) in components.iter().enumerate()
-            {
-                let mut state: CheckboxState = CheckboxState::new(component.is_selected());
-                if self.active_area == ActiveArea::Component
+            
+                // CONSOLE
+                let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
+                
+                // RENDER SUBLAYOUT 0
+                project_group.render(project_block.inner(project_area), buf, &mut self.state_project.clone());
+                project_block.render(project_area, buf);
+                
+                // RENDER SUBLAYOUT 1
+                component_group.render(component_block.inner(component_area), buf, &mut self.state_component.clone());
+                component_block.render(component_area, buf);
+                
+                // RENDER SUBLAYOUT 2
+                configure_group.render(configure_block.inner(configure_area), buf, &mut self.state_configure.clone());
+                configure_block.render(configure_area, buf);
+                
+                // RENDER SUBLAYOUT 3
+                script_group.render(script_block.inner(script_area), buf, &mut self.state_script.clone());
+                script_block.render(script_area, buf);
+                
+                // RENDER MAINLAYOUT 0
+                console.render(console_area, buf);
+                
+                // RENDER MAINLAYOUT 1
+                bottom_bar_help_menu.render(bottom_bar_area, buf);
+                bottom_bar_version.render(bottom_bar_area, buf);
+                
+                // RENDER MESSAGEBOX
+                if let Some(message_box) = self.message_box.as_ref()
                 {
-                    state.focus();
-                    if i == self.selected_component
-                    {
-                        state.highlight();
-                    }
+                    Widget::render(message_box, area, buf);
                 }
-
-                component_group.add_checkbox(
-                    {
-                        let mut checkbox: Checkbox<'_> = Checkbox::new(component.get_name());
-                        checkbox.set_state(state);
-                        checkbox
-                    }
-                );
             }
-
-            // SCRIPT LIST
-            let scripts: &Vec<Script> = configures[self.selected_configure].get_scripts();
-            for (i, script) in scripts.iter().enumerate()
+            ActiveView::AboutView =>
             {
-                let mut state: CheckboxState = CheckboxState::new(false);
-                state.data.symbols = Some(("", "→"));
-                state.data.style_highlighted = Some(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+                let [banner_area, middle_area] = Layout::vertical([
+                    Constraint::Length(9),
+                    Constraint::Min(1),
+                ]).areas(area);
+                
+                let banner: Vec<Line<'_>> = vec![
+                    Line::from("                                      888                     888               ").style(Style::default().fg(Color::Cyan)).alignment(Alignment::Center),
+                    Line::from("                                      888                     888               ").style(Style::default().fg(Color::LightCyan)).alignment(Alignment::Center),
+                    Line::from("                                      888                     888               ").style(Style::default().fg(Color::LightBlue)).alignment(Alignment::Center),
+                    Line::from("               88888b.d88b.  888  888 888888 .d88b.   .d88b.  888               ").style(Style::default().fg(Color::Blue)).alignment(Alignment::Center),
+                    Line::from("               888 '888 '88b 888  888 888   d88''88b d88''88b 888               ").style(Style::default().fg(Color::Indexed(27))).alignment(Alignment::Center),
+                    Line::from("               888  888  888 Y88  88P 888   888  888 888  888 888               ").style(Style::default().fg(Color::Indexed(27))).alignment(Alignment::Center),
+                    Line::from("               888  888  888  Y8bd8P  Y88b. Y88..88P Y88..88P 888               ").style(Style::default().fg(Color::Indexed(27))).bold().alignment(Alignment::Center),
+                    Line::from("               888  888  888   Y88P    'Y888 'Y88P'   'Y88P'  888               ").style(Style::default().fg(Color::Indexed(27))).bold().alignment(Alignment::Center),
+                    Line::from("────────────────────────────────────────────────────────────────────────────────").style(Style::default().fg(Color::DarkGray)).alignment(Alignment::Center),
+                ];
 
-                if self.active_area == ActiveArea::Scripts
-                {
-                    state.focus();
-                    if i == self.selected_script
-                    {
-                        state.data.is_selected = true;
-                        state.highlight();
-                    }
-                }
+                Paragraph::new(banner).render(banner_area, buf);
 
-                script_group.add_checkbox(
-                    {
-                        let mut checkbox: Checkbox<'_> = Checkbox::new(script.get_name());
-                        checkbox.set_state(state);
-                        checkbox
-                    }
-                );
+                let [qrcode_area, info_area] = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(middle_area);
+
+                let qrcode: Vec<Line<'_>> = vec![
+                    Line::from("█▀▀▀▀▀█ █▀   ▄█ ▄▀▀▄▄ █▀▀▀▀▀█"),
+                    Line::from("█ ███ █ ▀▄▀▀▀██▀ ▄ ▄█ █ ███ █"),
+                    Line::from("█ ▀▀▀ █ ▀██▄ ██ █▀█▀▄ █ ▀▀▀ █"),
+                    Line::from("▀▀▀▀▀▀▀ ▀ ▀ ▀▄█ █ ▀▄▀ ▀▀▀▀▀▀▀"),
+                    Line::from("█▄ ▀█▀▀▀▀  ▀▀ ██ █▄█▀█ ▄█ ██▀"),
+                    Line::from("▀██▄▀█▀▀▄█▄▄▀▀▄▀▀▄  ▄▄▄█▀▄▀ ▄"),
+                    Line::from(" ▀█▀██▀▀█▀  ▄ ▄▄▀ ▄█▀ ██▄▄▄▄█"),
+                    Line::from("▀█▄▄ ▀▀ ▀ █▄█▀ ▀▀ ▄█▀▀▀▄█ █ █"),
+                    Line::from("▄██▄▄ ▀  █▄ ▀▀▄▄  ██▀▀  ▄▀▄▄ "),
+                    Line::from("██▀█▀▀▀▄▄▀ █ █▄█▄  █  ▄ ▀█▄ ▀"),
+                    Line::from("▀▀  ▀ ▀ █▄▄ ▀█▄▄▀█▄ █▀▀▀██▀▀ "),
+                    Line::from("█▀▀▀▀▀█ █▀▀█▀█ █▀█ ██ ▀ █▀ ▄▄"),
+                    Line::from("█ ███ █ ██▄▄▀▀▄▄█  ▀▀█▀▀▀▀ ▀▄"),
+                    Line::from("█ ▀▀▀ █  ▄ █▄▄▄▀▀▀▄ ▀▀▄█▀▄█▀█"),
+                    Line::from("▀▀▀▀▀▀▀ ▀ ▀▀▀ ▀▀▀  ▀▀ ▀ ▀    "),
+                    Line::from(" ~ link to github project. ~ "),
+                ];
+                
+                Paragraph::new(qrcode).alignment(Alignment::Right).render(qrcode_area, buf);
+                
+                let info_lines: Vec<Line<'_>> = vec![
+                    Line::from(""),
+                    Line::from(vec![
+                        Span::styled("[esud] ", Style::default().fg(Color::Yellow).bold()),
+                        Span::styled(format!("mvtool v{}", env!("CARGO_PKG_VERSION")), Style::default().bold()),
+                    ]),
+                    Line::from(Span::styled("30/01/2026", Style::default().fg(Color::DarkGray))),
+                    Line::from(""),
+                    Line::from("Лицензия: MIT / Apache 2.0"),
+                    Line::from("").italic(),
+                    Line::from(""),
+                    Line::from(""),
+                    Line::from(""),
+                    Line::from(""),
+                    Line::from(""),
+                    Line::from(""),
+                    Line::from(vec![
+                        Span::styled("platforms: ", Style::default().fg(Color::Cyan)),
+                        Span::styled(format!("{}_{} {}", std::env::consts::OS, std::env::consts::ARCH, Utils::get_bit_depth()), Style::default().fg(Color::DarkGray)),
+                    ]),
+                    Line::from(vec![
+                        Span::styled("user: ", Style::default().fg(Color::Cyan)),
+                        Span::styled(format!("@{}", std::env::var("USERNAME").unwrap_or_else(|_| "User".to_string())), Style::default().fg(Color::DarkGray)),
+                    ]),
+                ];
+                            
+                Paragraph::new(info_lines).alignment(Alignment::Left).block(Block::default().padding(Padding::left(2))).render(info_area, buf);
             }
-        }
-
-        // CONSOLE
-        let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
-        
-        // RENDER SUBLAYOUT 0
-        project_group.render(project_block.inner(project_area), buf, &mut CheckboxGroupState { cursor: self.selected_project });
-        project_block.render(project_area, buf);
-
-        // RENDER SUBLAYOUT 1
-        component_group.render(component_block.inner(component_area), buf, &mut CheckboxGroupState { cursor: self.selected_component });
-        component_block.render(component_area, buf);
-
-        // RENDER SUBLAYOUT 2
-        configure_group.render(configure_block.inner(configure_area), buf, &mut CheckboxGroupState { cursor: self.selected_configure });
-        configure_block.render(configure_area, buf);
-
-        // RENDER SUBLAYOUT 3
-        script_group.render(script_block.inner(script_area), buf, &mut CheckboxGroupState { cursor: self.selected_script });
-        script_block.render(script_area, buf);
-
-        // RENDER MAINLAYOUT 0
-        console.render(console_area, buf);
-
-        // RENDER MAINLAYOUT 1
-        bottom_bar_help_menu.render(bottom_bar_area, buf);
-        bottom_bar_version.render(bottom_bar_area, buf);
-
-        // RENDER MESSAGEBOX
-        if let Some(message_box) = self.message_box.as_ref()
-        {
-            Widget::render(message_box, area, buf);
         }
     }
 }

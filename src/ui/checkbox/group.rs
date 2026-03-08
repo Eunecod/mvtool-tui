@@ -6,10 +6,19 @@ use ratatui::widgets::{StatefulWidget, Widget, ScrollbarOrientation, Scrollbar, 
 use crate::ui::checkbox::Checkbox;
 use crate::ui::checkbox::layout::{ LayoutCheckboxGroup, LayoutCheckboxGroupData };
 
-#[derive(Default)]
+#[derive(Clone)]
 pub struct CheckboxGroupState
 {
     pub cursor: usize,
+    pub selected: usize,
+}
+
+impl Default for CheckboxGroupState
+{
+    fn default() -> Self
+    {
+        return Self { cursor: 0, selected: 0 };
+    }
 }
 
 pub struct HorizontalCheckboxGroup<'a>(LayoutCheckboxGroupData<'a>);
@@ -65,7 +74,7 @@ impl<'a> StatefulWidget for HorizontalCheckboxGroup<'a>
             x += width.saturating_add(1) ;
         }
 
-        let scrollbar: Scrollbar<'_> = Scrollbar::new(ScrollbarOrientation::HorizontalBottom).begin_symbol(Some("┠")).end_symbol(Some("┨")).track_symbol(Some("─")).thumb_symbol("═");
+        let scrollbar: Scrollbar<'_> = Scrollbar::new(ScrollbarOrientation::HorizontalBottom).begin_symbol(Some("┠")).end_symbol(Some("┨")).track_symbol(Some("─")).thumb_symbol("━");
         StatefulWidget::render(scrollbar, area, buf, &mut ScrollbarState::new(total_items).position(state.cursor).viewport_content_length(visible_count));
     }
 }
@@ -118,7 +127,7 @@ impl<'a> StatefulWidget for VerticalCheckboxGroup<'a>
             Widget::render(checkbox, Rect::new(area.x, y, area.width.saturating_sub(1), 1), buf);
         }
 
-        let scrollbar: Scrollbar<'_> = Scrollbar::new(ScrollbarOrientation::VerticalRight).begin_symbol(Some("┯")).end_symbol(Some("┷")).track_symbol(Some("│")).thumb_symbol("║");
+        let scrollbar: Scrollbar<'_> = Scrollbar::new(ScrollbarOrientation::VerticalRight).begin_symbol(Some("┯")).end_symbol(Some("┷")).track_symbol(Some("│")).thumb_symbol("█");
         StatefulWidget::render(scrollbar, area, buf, &mut ScrollbarState::new(total_items).position(state.cursor).viewport_content_length(height));
     }
 }
