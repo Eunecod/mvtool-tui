@@ -21,7 +21,8 @@ pub struct Spin
 
 impl Spin
 {
-    const FRAMES: &'static [&'static str] = &["⠁", "⠉", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠃"];
+    const TICK_DIVIDER: usize = 2;
+    const FRAMES: &'static [&'static str] = &["|", "/", "-", "\\"];
 
     pub fn new(state: SpinState) -> Self
     {
@@ -35,7 +36,9 @@ impl Spin
             return "";
         }
 
-        let index: usize = (self.state.tick_count as usize) % Self::FRAMES.len();
+        let slowed_tick: usize = (self.state.tick_count as usize) / Self::TICK_DIVIDER;
+        let index: usize = slowed_tick % Self::FRAMES.len();
+
         return Self::FRAMES[index];
     }
 
