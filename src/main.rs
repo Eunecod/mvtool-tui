@@ -615,13 +615,14 @@ impl App
                     return;
                 }
 
-                self.projects[self.state_project.cursor].get_configures_mut()[self.state_configure.cursor]
-                .get_components_mut().iter_mut().for_each(
-                    |configure: &mut Component|
-                    {
-                        configure.set_selected(true);
-                    }
-                );
+                let components: &mut Vec<Component> 
+                    = self.projects[self.state_project.cursor].get_configures_mut()[self.state_configure.cursor].get_components_mut();
+
+                let should_select: bool = components.iter().any(|component: &Component| !component.is_selected());
+                for component in components.iter_mut()
+                {
+                    component.set_selected(should_select);
+                }
             }
 
             _ => { }
@@ -677,13 +678,18 @@ impl Widget for &App
                     [
                         " F1 ".black().on_gray(), " Run ".gray(),
                         " Space ".black().on_gray(), " Toggle ".gray(),
-                        " ^ + a ".black().on_gray(), " Select All ".gray(),
+                        " ^ + a ".black().on_gray(), " Un/Select All ".gray(),
                         " Tab ".black().on_gray(), " Next Area ".gray(),
                         " ▲ ▼ ".black().on_gray(), " Move ".gray(),
-                        " Esc ".black().on_gray(), " Exit ".gray(),
                     ]
                 )).style(Style::default().bg(Color::Reset)).alignment(ratatui::layout::Alignment::Left);
-                let bottom_bar_version: Paragraph<'_> = Paragraph::new(format!(" [esud] mvtool v{}", env!("CARGO_PKG_VERSION")).gray()).alignment(ratatui::layout::Alignment::Right);
+                let bottom_bar_version: Paragraph<'_> = Paragraph::new(
+                Line::from(vec!
+                    [
+                        " F2 ".black().on_gray(), " Fetch ".gray(),
+                        " Esc ".black().on_gray(), " Exit ".gray()
+                    ]
+                )).alignment(ratatui::layout::Alignment::Right);
                     
                 if !self.projects.is_empty()
                 {
