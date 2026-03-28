@@ -1,0 +1,1 @@
+main_icon ICON "icon.ico"
