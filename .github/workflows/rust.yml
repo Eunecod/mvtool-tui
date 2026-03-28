@@ -26,29 +26,28 @@ jobs:
         $TAG = "${{ github.ref_name }}"
         $VERSION = $TAG.TrimStart('v')
         
-        $parts = $VERSION.Split('.')
-        $RELEASE_TAG = "v$($parts[0]).$($parts[1])"
+        $RELEASE_TAG = $TAG
         
         $ASSET_NAME = "mvtool-x86_64-pc-windows-msvc.tar"
 
-        if (Test-Path "target/release/mvtool.exe") {
-            tar -cvf $ASSET_NAME -C target/release mvtool.exe
-        } else {
-            Write-Error "mvtool.exe not found!"
-            exit 1
-        }
+        New-Item -ItemType Directory -Force -Path "dist"
+        Copy-Item "target/release/mvtool.exe" -Destination "dist/"
+
+        if (Test-Path "res") { Copy-Item -Recurse "res" -Destination "dist/" }
+        if (Test-Path "icon.ico") { Copy-Item "icon.ico" -Destination "dist/" }
+
+        tar -cvf $ASSET_NAME -C dist .
 
         echo "RELEASE_TAG=$RELEASE_TAG" >> $env:GITHUB_ENV
         echo "RELEASE_TITLE=Release $VERSION" >> $env:GITHUB_ENV
         echo "ASSET_NAME=$ASSET_NAME" >> $env:GITHUB_ENV
 
     - name: Upload to Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ env.RELEASE_TAG }}
         name: ${{ env.RELEASE_TITLE }}
         files: ${{ env.ASSET_NAME }}
-        overwrite: true
         make_latest: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
