@@ -1,8 +1,7 @@
-name: Rust
+name: Rust Release Build
 
 on:
   push:
-    branches: [ "master" ]
     tags:
       - 'v*'
 
@@ -14,8 +13,6 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
@@ -23,38 +20,35 @@ jobs:
     - name: Build Release
       run: cargo build --release --verbose
       
-    - name: Parse Version and Decide Strategy
+    - name: Prepare Asset
       shell: powershell
       run: |
-        $TAG = "${{ github.ref_name }}" # Это v1.3.4
-        $CURRENT_VER = $TAG.TrimStart('v')
+        $TAG = "${{ github.ref_name }}"
+        $VERSION = $TAG.TrimStart('v')
         
-        $parts = $CURRENT_VER.Split('.')
-        $MAJOR_MINOR_TAG = "v$($parts[0]).$($parts[1])" 
+        $parts = $VERSION.Split('.')
+        $RELEASE_TAG = "v$($parts[0]).$($parts[1])"
         
-        $STABLE_NAME = "mvtool-x86_64-pc-windows-msvc.tar"
-        $VERSIONED_NAME = "mvtool_$($CURRENT_VER)-x86_64-pc-windows-msvc.tar"
+        $ASSET_NAME = "mvtool-x86_64-pc-windows-msvc.tar"
 
-        cd target/release
-        tar -cvf "../../$STABLE_NAME" mvtool.exe
-        tar -cvf "../../$VERSIONED_NAME" mvtool.exe
-        cd ../..
+        if (Test-Path "target/release/mvtool.exe") {
+            tar -cvf $ASSET_NAME -C target/release mvtool.exe
+        } else {
+            Write-Error "mvtool.exe not found!"
+            exit 1
+        }
 
-        echo "STABLE_ASSET=$STABLE_NAME" >> $env:GITHUB_ENV
-        echo "VERSIONED_ASSET=$VERSIONED_NAME" >> $env:GITHUB_ENV
-        echo "RELEASE_TAG=$MAJOR_MINOR_TAG" >> $env:GITHUB_ENV
-        echo "RELEASE_TITLE=$TAG" >> $env:GITHUB_ENV
-        
+        echo "RELEASE_TAG=$RELEASE_TAG" >> $env:GITHUB_ENV
+        echo "RELEASE_TITLE=Release $VERSION" >> $env:GITHUB_ENV
+        echo "ASSET_NAME=$ASSET_NAME" >> $env:GITHUB_ENV
+
     - name: Upload to Release
-      if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ env.RELEASE_TAG }}
         name: ${{ env.RELEASE_TITLE }}
-        files: |
-          ${{ env.STABLE_ASSET }}
-          ${{ env.VERSIONED_ASSET }}
-        append_body: false 
+        files: ${{ env.ASSET_NAME }}
+        overwrite: true
         make_latest: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
