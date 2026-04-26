@@ -63,9 +63,9 @@ impl Updater
     {
         let client: Client   = Client::new();
         let response: String = client.get(format!("https://api.github.com/repos/{}/{}/releases/latest", self.owner, self.repo)).header("User-Agent", &self.bin_name).send()?.text()?;
-        
+
         let json: Value = serde_json::from_str(&response)?;
-        
+
         self.state = ReleaseUpdateGithub::new(
             (env!("CARGO_PKG_VERSION").to_string(), json["tag_name"].as_str().unwrap_or("0.0.0").trim_start_matches('v').to_string())
         );
@@ -77,9 +77,9 @@ impl Updater
     {
         let client: Client   = Client::new();
         let response: String = client.get(format!("https://api.github.com/repos/{}/{}/releases/latest", self.owner, self.repo)).header("User-Agent", &self.bin_name).send()?.text()?;
-        
+
         let json: Value = serde_json::from_str(&response)?;
-        
+
         let mut browser_download_url: Option<String> = None;
         let mut asset_name: String = String::new();
         let mut total_size: u64 = 0u64;
@@ -104,15 +104,15 @@ impl Updater
                 }
             }
         }
-        
+
         let download_url: String = browser_download_url.ok_or("is not support platform")?;
-        
+
         let updates_dir: &Path = Path::new("updates");
         std::fs::create_dir_all(updates_dir)?;
         let archive_path: PathBuf = updates_dir.join(&asset_name);
-        
+
         let mut response: reqwest::blocking::Response = client.get(&download_url).header("User-Agent", &self.bin_name).send()?;
-        
+
         let mut file: File = File::create(&archive_path)?;
         let mut downloaded: u64 = 0u64;
         let mut buffer: [u8; 16384] = [0; 16384];
@@ -127,13 +127,13 @@ impl Updater
             {
                 break;
             }
-            
+
             file.write_all(&buffer[..bytes_read])?;
             downloaded += bytes_read as u64;
 
             if total_size > 0
             {
-                let percent = ((downloaded as f64 / total_size as f64) * 100.0) as u32;  
+                let percent = ((downloaded as f64 / total_size as f64) * 100.0) as u32;
                 if percent > last_reported_percent
                 {
                     last_reported_percent = percent;
@@ -144,21 +144,21 @@ impl Updater
 
         let extract_path = updates_dir.join("extracted");
         std::fs::create_dir_all(&extract_path)?;
-        
+
         let _ = tx.send(AppEvent::Log("extracting archive...".into(), MessageType::Info));
         let mut archive = tar::Archive::new(File::open(&archive_path)?);
         archive.unpack(&extract_path)?;
 
         let new_bin_path = self.find_binary(&extract_path)?;
         self_replace::self_replace(&new_bin_path)?;
-        
+
         let _ = std::fs::remove_dir_all(updates_dir);
-        
+
         return Ok(self);
     }
-    
+
     fn find_binary(&self, dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>>
-    {        
+    {
         fn search(dir: &Path, applicant_name: &str) -> Option<PathBuf>
         {
             if let Ok(entries) = std::fs::read_dir(dir)
@@ -188,7 +188,7 @@ impl Updater
 
             return None;
         }
-        
+
         let name: String = format!("{}.exe", self.bin_name);
         return search(dir, &name).ok_or_else(|| "application executable file was not found".into());
     }

@@ -1,13 +1,13 @@
 // src/main.rs
 
-//                        888                     888 | 
-//                        888                     888 | 
+//                        888                     888 |
+//                        888                     888 |
 //                        888                     888 | [esud] mvtool
 // 88888b.d88b.  888  888 888888 .d88b.   .d88b.  888 | 30/01/2026
-// 888 '888 '88b 888  888 888   d88''88b d88''88b 888 | 
+// 888 '888 '88b 888  888 888   d88''88b d88''88b 888 |
 // 888  888  888 Y88  88P 888   888  888 888  888 888 | Лицензия: MIT / Apache 2.0
-// 888  888  888  Y8bd8P  Y88b. Y88..88P Y88..88P 888 | 
-// 888  888  888   Y88P    'Y888 'Y88P'   'Y88P'  888 |   
+// 888  888  888  Y8bd8P  Y88b. Y88..88P Y88..88P 888 |
+// 888  888  888   Y88P    'Y888 'Y88P'   'Y88P'  888 |
 
 mod objects;
 mod utils;
@@ -60,7 +60,7 @@ pub enum AppEvent
 pub struct App
 {
     event_bus: (mpsc::Sender<AppEvent>, mpsc::Receiver<AppEvent>),
-    
+
     message_box: Option<MessageBox<'static>>,
     projects: Vec<Project>,
     state_project: CheckboxGroupState,
@@ -81,7 +81,7 @@ impl Default for App
         return Self
         {
             event_bus: std::sync::mpsc::channel(),
-            
+
             message_box: None,
             projects: Vec::new(),
             state_project: CheckboxGroupState::default(),
@@ -117,7 +117,7 @@ impl App
                 {
                     let _ = tx.send(AppEvent::UpdateAvailable(
                         ReleaseUpdateGithub
-                        { 
+                        {
                             version_current: updater.state.version_current, version_new: updater.state.version_new, is_available: updater.state.is_available
                         }
                     ));
@@ -158,7 +158,7 @@ impl App
             self.projects.push(Project::new(
                 projects["name"].as_str().unwrap_or_default().to_string(),
                 projects["destination_path"].as_str().unwrap_or_default().to_string(),
-                configures, 
+                configures,
                 projects["selected"].as_bool().unwrap_or(false),
             ));
         }
@@ -173,7 +173,7 @@ impl App
         while !self.exit
         {
             terminal.draw(|f: &mut Frame<'_>| self.draw(f))?;
-            
+
             self.handle_updates();
             self.spin.tick();
 
@@ -187,7 +187,7 @@ impl App
     }
 
     fn run_update(tx: mpsc::Sender<AppEvent>)
-    {   
+    {
         let _ = tx.send(AppEvent::WaitProcess(SpinState { tick_count: 0, procces: true }));
         let _ = tx.send(AppEvent::Log("starting update process...".into(), MessageType::Info));
 
@@ -243,7 +243,7 @@ impl App
                         fallback = false;
 
                         if configure.should_clean()
-                        { 
+                        {
                             let _ = tx.send(AppEvent::Log("cleaning components...".into(), MessageType::Info));
 
                             if let Ok(entries) = fs::read_dir(dest_path)
@@ -251,7 +251,7 @@ impl App
                                 for entry in entries.flatten()
                                 {
                                     let file_name: String = entry.file_name().to_string_lossy().to_string();
-                                    
+
                                     let matches_mask: bool = configure.get_extension_mask().is_empty() || configure.get_extension_mask().iter().any(|ext: &String| file_name.ends_with(ext));
                                     if !matches_mask
                                     {
@@ -263,7 +263,7 @@ impl App
                                         if Utils::is_match(&entry.path(), component.get_name(), configure.get_extension_mask())
                                         {
                                             let _ = fs::remove_file(entry.path());
-                                            break; 
+                                            break;
                                         }
                                     }
                                 }
@@ -348,7 +348,7 @@ impl App
                     if state.is_available
                     {
                         let tx: mpsc::Sender<AppEvent> = self.event_bus.0.clone();
-                        self.message_box = Some(MessageBox::new("[ update ]", 
+                        self.message_box = Some(MessageBox::new("[ update ]",
                             vec![
                                 Line::from("New version available!".bold()).alignment(Alignment::Center),
                                 Line::from(""),
@@ -360,7 +360,7 @@ impl App
                             .set_accept(
                                 {
                                     move || { Self::run_update(tx.clone()); }
-                                } 
+                                }
                             )
                         );
                     }
@@ -415,7 +415,7 @@ impl App
 
                 return Ok(());
             }
-        
+
             match key.code
             {
                 KeyCode::Up        => self.move_selection(-1),
@@ -431,7 +431,7 @@ impl App
                     match self.active_view
                     {
                         ActiveView::MainView => self.active_view = ActiveView::AboutView,
-                        ActiveView::AboutView => self.active_view = ActiveView::MainView,   
+                        ActiveView::AboutView => self.active_view = ActiveView::MainView,
                     }
                 }
                 KeyCode::Esc       if !self.spin.state.procces => self.exit = true,
@@ -510,7 +510,7 @@ impl App
             {
                 self.state_configure.cursor = self.state_configure.selected;
             }
-        
+
             _ => {}
         }
 
@@ -554,9 +554,9 @@ impl App
                 {
                     return;
                 }
-                
+
                 let project: &mut Project = &mut self.projects[self.state_project.cursor];
-                
+
                 self.state_configure.selected = self.state_configure.cursor;
                 let selected: bool = project.get_configures()[self.state_configure.cursor].is_selected();
                 project.get_configures_mut().iter_mut().for_each(|configure: &mut Configure| { configure.set_selected(false); });
@@ -615,7 +615,7 @@ impl App
                     return;
                 }
 
-                let components: &mut Vec<Component> 
+                let components: &mut Vec<Component>
                     = self.projects[self.state_project.cursor].get_configures_mut()[self.state_configure.cursor].get_components_mut();
 
                 let should_select: bool = components.iter().any(|component: &Component| !component.is_selected());
@@ -649,29 +649,29 @@ impl Widget for &App
                     Constraint::Length(5),
                     Constraint::Length(1),
                 ]).areas(area);
-                    
+
                 let [side_area, component_area] = Layout::horizontal([Constraint::Percentage(30), Constraint::Percentage(70)]).areas(middle_area);
                 let [configure_area, script_area] = Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)]).areas(side_area);
-                    
+
                 // PROJECT LIST
                 let mut project_group: HorizontalCheckboxGroup<'_> = HorizontalCheckboxGroup::new();
                 let project_block: Block<'_> = Block::bordered().title("[ projects ] - use ← → to navigate ".bold()).border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Project)).padding(Padding { left: 2, right: 2, top: 1, bottom: 0 });
-                    
+
                 // CONFIGURE LIST
                 let mut configure_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
                 let configure_block: Block<'_> = Block::bordered().title("[ configure ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Configure)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
-                    
+
                 // COMPONENT LIST
                 let mut component_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
                 let component_block: Block<'_> = Block::bordered().title("[ components ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Component)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
-                    
+
                 // SCRIPT LIST
                 let mut script_group: VerticalCheckboxGroup<'_> = VerticalCheckboxGroup::new();
                 let script_block: Block<'_> = Block::bordered().title("[ scripts ]").border_set(border::ROUNDED).border_style(self.area_style(ActiveArea::Scripts)).padding(Padding { left: 2, right: 2, top: 1, bottom: 1 });
-                    
+
                 // CONSOLE
                 let console_block: Block<'_> = Block::bordered().title(format!("[ console {}]", &mut self.spin.get_frame())).border_set(border::ROUNDED).padding(Padding { left: 1, right: 0, top: 1, bottom: 1 });
-            
+
                 // BOTTOM BAR
                 let bottom_bar_help_menu: Paragraph<'_> = Paragraph::new(
                 Line::from(vec!
@@ -690,7 +690,7 @@ impl Widget for &App
                         " Esc ".black().on_gray(), " Exit ".gray()
                     ]
                 )).alignment(ratatui::layout::Alignment::Right);
-                    
+
                 if !self.projects.is_empty()
                 {
                     // PROJECT LIST
@@ -704,8 +704,8 @@ impl Widget for &App
                             {
                                 state.highlight();
                             }
-                        }  
-                    
+                        }
+
                         project_group.add_checkbox(
                             {
                                 let mut checkbox: Checkbox<'_> = Checkbox::new(project.get_name());
@@ -714,7 +714,7 @@ impl Widget for &App
                             }
                         );
                     }
-                
+
                     // CONFIGURE LIST
                     let configures: &Vec<Configure> = self.projects[self.state_project.cursor].get_configures();
                     for (i, configure) in configures.iter().enumerate()
@@ -737,7 +737,7 @@ impl Widget for &App
                             }
                         );
                     }
-                
+
                     // COMPONENT LIST
                     let components: &Vec<objects::Component> = configures[self.state_configure.cursor].get_components();
                     for (i, component) in components.iter().enumerate()
@@ -760,7 +760,7 @@ impl Widget for &App
                             }
                         );
                     }
-                
+
                     // SCRIPT LIST
                     let scripts: &Vec<Script> = configures[self.state_configure.cursor].get_scripts();
                     for (i, script) in scripts.iter().enumerate()
@@ -788,33 +788,33 @@ impl Widget for &App
                         );
                     }
                 }
-            
+
                 // CONSOLE
                 let console: Paragraph<'_> = self.message_log.get_message().block(console_block.style(Color::Gray));
-                
+
                 // RENDER SUBLAYOUT 0
                 project_group.render(project_block.inner(project_area), buf, &mut self.state_project.clone());
                 project_block.render(project_area, buf);
-                
+
                 // RENDER SUBLAYOUT 1
                 component_group.render(component_block.inner(component_area), buf, &mut self.state_component.clone());
                 component_block.render(component_area, buf);
-                
+
                 // RENDER SUBLAYOUT 2
                 configure_group.render(configure_block.inner(configure_area), buf, &mut self.state_configure.clone());
                 configure_block.render(configure_area, buf);
-                
+
                 // RENDER SUBLAYOUT 3
                 script_group.render(script_block.inner(script_area), buf, &mut self.state_script.clone());
                 script_block.render(script_area, buf);
-                
+
                 // RENDER MAINLAYOUT 0
                 console.render(console_area, buf);
-                
+
                 // RENDER MAINLAYOUT 1
                 bottom_bar_help_menu.render(bottom_bar_area, buf);
                 bottom_bar_version.render(bottom_bar_area, buf);
-                
+
                 // RENDER MESSAGEBOX
                 if let Some(message_box) = self.message_box.as_ref()
                 {
@@ -827,7 +827,7 @@ impl Widget for &App
                     Constraint::Length(9),
                     Constraint::Min(1),
                 ]).areas(area);
-                
+
                 let banner: Vec<Line<'_>> = vec![
                     Line::from("                                      888                     888               ").style(Style::default().fg(Color::Cyan)).alignment(Alignment::Center),
                     Line::from("                                      888                     888               ").style(Style::default().fg(Color::LightCyan)).alignment(Alignment::Center),
@@ -862,9 +862,9 @@ impl Widget for &App
                     Line::from("▀▀▀▀▀▀▀ ▀ ▀▀▀ ▀▀▀  ▀▀ ▀ ▀    "),
                     Line::from(" ~ link to github project. ~ "),
                 ];
-                
+
                 Paragraph::new(qrcode).alignment(Alignment::Right).render(qrcode_area, buf);
-                
+
                 let info_lines: Vec<Line<'_>> = vec![
                     Line::from(""),
                     Line::from(vec![
@@ -890,7 +890,7 @@ impl Widget for &App
                         Span::styled(format!("@{}", std::env::var("USERNAME").unwrap_or_else(|_| "User".to_string())), Style::default().fg(Color::DarkGray)),
                     ]),
                 ];
-                            
+
                 Paragraph::new(info_lines).alignment(Alignment::Left).block(Block::default().padding(Padding::left(2))).render(info_area, buf);
             }
         }
