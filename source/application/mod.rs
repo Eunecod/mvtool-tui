@@ -308,7 +308,7 @@ impl Application {
 		    match event {
 		        sdl2::event::Event::KeyDown { keycode: Some(sdl2::keyboard::Keycode::F1), repeat: false, .. } => {
 		            if !self.waiter_state.process {
-						self.systems.plugin_manager.emit(&self.systems.plugin_loader, "on_project", &mlua::Value::Nil)
+						self.systems.plugin_manager.emit(&self.systems.plugin_loader, "on_action", &mlua::Value::Nil)
 							.map_err(|error| format!("Ошибка выполнения плагинами: {}", error))?;
 
 		                run_copying(self.data.projects.clone(), self.event_bus.0.clone());
