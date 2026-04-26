@@ -21,7 +21,7 @@ impl ConfiguresWidget {
 impl Widget<Root> for ConfiguresWidget {
     fn draw(&mut self, ui: &Ui, root: &mut Root) {
         ui.window("Конфигурации###configures_window")
-            .size([100.0, 0.0], Condition::FirstUseEver)
+            .size([500.0, 0.0], Condition::FirstUseEver)
             .build(|| {
                 ui.separator();
 

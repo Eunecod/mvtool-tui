@@ -61,7 +61,7 @@ impl Widget<Root> for ConsoleWidget {
     fn draw(&mut self, ui: &Ui, _root: &mut Root) {
         let header: String = format!("Консоль {}###console_window", WaiterWidget::get_frame(&mut self.waiter_state));
         ui.window(&header)
-            .size([100.0, 0.0], Condition::FirstUseEver)
+            .size([500.0, 0.0], Condition::FirstUseEver)
             .build(|| {
                 let button_width = 100.0;
             
