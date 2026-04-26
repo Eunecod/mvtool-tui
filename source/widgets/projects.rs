@@ -21,7 +21,7 @@ impl ProjectsWidget {
 impl Widget<Root> for ProjectsWidget {
     fn draw(&mut self, ui: &Ui, root: &mut Root) {
         ui.window("Проекты###projects_window")
-            .size([0.0, 0.0], Condition::FirstUseEver)
+            .size([100.0, 0.0], Condition::FirstUseEver)
             .build(|| {
                 ui.separator();
 
