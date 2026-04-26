@@ -32,7 +32,7 @@ impl ComponentsWidget {
 impl Widget<Root> for ComponentsWidget {
     fn draw(&mut self, ui: &Ui, root: &mut Root) {
         ui.window("Компоненты###components_window")
-            .size([0.0, 0.0], Condition::Always)
+            .size([0.0, 0.0], Condition::FirstUseEver)
             .build(|| {
                 ui.separator();
 
