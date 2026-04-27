@@ -4,6 +4,7 @@ use std::process::Command;
 use std::process::exit;
 use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::env::current_exe;
 
 mod backend;
@@ -80,6 +81,25 @@ impl Systems {
 	}
 }
 
+#[derive(Clone)]
+pub struct SharedRoot {
+    inner: Arc<RwLock<Root>>
+}
+
+impl SharedRoot {
+    pub fn new(root: Root) -> Self {
+        Self { inner: Arc::new(RwLock::new(root)) }
+    }
+
+    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, Root> {
+        self.inner.read().expect("Root lock poisoned")
+    }
+
+    pub fn write(&self) -> std::sync::RwLockWriteGuard<'_, Root> {
+        self.inner.write().expect("Root lock poisoned")
+    }
+}
+
 pub struct Application {
 	event_bus: (mpsc::Sender<AppEvent>, mpsc::Receiver<AppEvent>),
 	systems: Systems,
@@ -90,16 +110,18 @@ pub struct Application {
 	imgui: ImGUI,
 	sdl: SDL2,
 	workspace: Workspace,
-	data: Root
+	data: SharedRoot
 }
 
 impl Application {
 	pub fn new() -> Result<Self, String> {
 		let (sender, receiver) = mpsc::channel();
 
+		let shared_data = SharedRoot::new(Root { projects: Vec::new() });
+
 		let api = Api {
 			sender: sender.clone(),
-			data: Root { projects: Vec::new() }
+			data: shared_data.clone()
 		};
 
 		Ok(Self {
@@ -112,7 +134,7 @@ impl Application {
 			imgui: ImGUI::new(),
 			sdl: SDL2::new()?,
 			workspace: Workspace::new(),
-			data: Root { projects: Vec::new() },
+			data: shared_data,
 		})
 	}
 
@@ -142,7 +164,8 @@ impl Application {
 		let repository = JsonRepository::new("setting.json");
 		match repository.load() {
             Ok(root) => {
-                self.data = root;
+                let mut data = self.data.write();
+                *data = root;
             }
             Err(error) => {
 				let _ = self.event_bus.0.send(AppEvent::Devent(error, MessageType::Error));
@@ -164,8 +187,6 @@ impl Application {
 
 		'running: loop {
 			events_keyboard.clear();
-			self.systems.plugin_loader.api.data = self.data.clone();
-
 			self.sdl.poll_events(|event| {
 				self.imgui.handle_event(&event);
 			    if let sdl2::event::Event::Quit { .. } = event {
@@ -211,7 +232,7 @@ impl Application {
 
 						self.message_box.draw(ui, root);
 				    });
-			}, &mut self.data);
+			}, &mut self.data.write());
 
 			unsafe {
 				let ctx = opengl.gl_renderer().gl_context();
@@ -311,7 +332,7 @@ impl Application {
 						self.systems.plugin_manager.emit(&self.systems.plugin_loader, "on_action", &mlua::Value::Nil)
 							.map_err(|error| format!("Ошибка выполнения плагинами: {}", error))?;
 
-		                run_copying(self.data.projects.clone(), self.event_bus.0.clone());
+		                run_copying(self.data.read().projects.clone(), self.event_bus.0.clone());
 		            }
 		        }
 

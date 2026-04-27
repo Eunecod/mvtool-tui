@@ -10,22 +10,19 @@ use std::collections::HashMap;
 
 use std::sync::mpsc::Sender;
 
+use crate::application::SharedRoot;
 use crate::application::events::AppEvent;
+
 use crate::widgets::console::MessageType;
 
-use crate::models::Root;
-
 pub struct Plugin {
+    #[expect(unused)]
     lua: Lua,
     hook: Table,
     context: Table
 }
 
 impl Plugin {
-    pub fn lua(&self) -> &Lua {
-        &self.lua
-    }
-
     pub fn hook(&self) -> &Table {
         &self.hook
     }
@@ -37,7 +34,7 @@ impl Plugin {
 
 pub struct Api {
     pub sender: Sender<AppEvent>,
-    pub data: Root
+    pub data: SharedRoot
 }
 
 pub struct PluginLoader {
@@ -103,7 +100,7 @@ impl PluginLoader {
         let api = lua.create_table().map_err(|error| format!("Критическая ошибка внедрения api: {}", error))?;
         
         let bus = self.api.sender.clone();
-        let data_clone = self.api.data.clone();
+        let data = self.api.data.clone();
 
         /* impl log */
         let log = lua.create_function(move |_, message: String| {
@@ -113,28 +110,32 @@ impl PluginLoader {
 
         api.set("log", log).map_err(|error| error.to_string())?;
 
-        /* impl data */
-        let data = lua.create_function(move |lua, key: String| {
+        /* impl root */
+        let root = lua.create_function(move |lua, key: String| {
+            let data = data.read();
+
             match key.as_str() {
                 "projects" => {
                     let table = lua.create_table()?;
-                    
-                    for (i, project) in data_clone.projects.iter().enumerate() {
+
+                    for (i, project) in data.projects.iter().enumerate() {
                         let project_table = lua.create_table()?;
-                        project_table.set("name", project.name.clone())?;
-                        project_table.set("selected", project.selected)?;
-        
+
+                        project_table .set("name", project.name.clone())?;
+                        project_table .set("destination_path", project.destination_path.clone())?;
+                        project_table .set("selected", project.selected)?;
+
                         table.set(i + 1, project_table)?;
                     }
-                    
+
                     Ok(Value::Table(table))
                 }
-        
-                _ => Ok(Value::Nil)
+
+                _ => Ok(Value::Nil),
             }
-        }).map_err(|error| format!("Ошибка загрузки [api: data]: {}", error))?;
+        }).map_err(|error| format!("Ошибка загрузки [api: root]: {}", error))?;
         
-        api.set("data", data).map_err(|error| error.to_string())?;
+        api.set("root", root).map_err(|error| error.to_string())?;
 
         Ok(api)
     }
