@@ -6,3 +6,5 @@ pub use manager::PluginManager;
 pub mod loader;
 pub use loader::PluginLoader;
 pub use loader::Api;
+
+pub mod bridge;

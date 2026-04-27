@@ -2,7 +2,6 @@
 
 use mlua::Lua;
 use mlua::Table;
-use mlua::Value;
 
 use std::fs;
 use std::path::Path;
@@ -119,19 +118,13 @@ impl PluginLoader {
                     let table = lua.create_table()?;
 
                     for (i, project) in data.projects.iter().enumerate() {
-                        let project_table = lua.create_table()?;
-
-                        project_table .set("name", project.name.clone())?;
-                        project_table .set("destination_path", project.destination_path.clone())?;
-                        project_table .set("selected", project.selected)?;
-
-                        table.set(i + 1, project_table)?;
+                        table.set(i + 1, project.clone())?;
                     }
 
-                    Ok(Value::Table(table))
+                    Ok(mlua::Value::Table(table))
                 }
 
-                _ => Ok(Value::Nil),
+                _ => Ok(mlua::Value::Nil),
             }
         }).map_err(|error| format!("Ошибка загрузки [api: root]: {}", error))?;
         
