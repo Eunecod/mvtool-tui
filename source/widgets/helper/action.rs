@@ -25,7 +25,7 @@ impl ActionWidget {
         let style = ui.push_style_var(StyleVar::FramePadding([1.0, 1.0]));
 
         for (i, item) in items.iter_mut().enumerate() {
-            /* Создаем чекбокс, но сохраняем его функциональность */
+            /* Создаем виджет исполнителя */
             {
                 if i == self.index {
                     ui.text_colored([1.0, 1.0, 0.2, 1.0], &item.name());
@@ -35,18 +35,11 @@ impl ActionWidget {
 
                 ui.same_line();
 
-                let padding = ui.push_style_var(StyleVar::FramePadding([3.0, 2.0]));
-                let rounding = ui.push_style_var(StyleVar::FrameRounding(4.0));
-
-                let button_width = 40.0;
-
+                let button_width = 30.0;
                 ui.set_cursor_pos([ui.content_region_max()[0] - button_width, ui.cursor_pos()[1]]);
-                if ui.button_with_size(format!(" ▶ ##{}_{}", self.label, i), [button_width, 0.0]) {
+                if ui.button_with_size(format!("▶##{}_{}", self.label, i), [button_width, 0.0]) {
                     self.execute_command(item.command());
                 }
-
-                padding.pop();
-                rounding.pop();
 
                 if ui.is_window_focused() {
                     if i == self.index && ui.is_key_pressed(imgui::Key::Space) {
