@@ -28,7 +28,8 @@ pub fn register_aumid(aumid: &str, display_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-// pub fn get_bit_depth() -> String
-// {
-//     return if cfg!(target_pointer_width = "64") { "64-bit".into() } else { "32-bit".into() };
-// }
+#[expect(unused)]
+pub fn get_bit_depth() -> String
+{
+    return if cfg!(target_pointer_width = "64") { "64-bit".into() } else { "32-bit".into() };
+}

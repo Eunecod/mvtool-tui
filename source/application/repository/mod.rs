@@ -5,9 +5,10 @@ use std::path::PathBuf;
 
 use crate::models::Root;
 
-#[allow(dead_code)]
 pub trait Repository {
     fn load(&self) -> Result<Root, String>;
+
+    #[expect(unused)]
     fn save(&self, settings: &Root) -> Result<(), String>;
 }
 
