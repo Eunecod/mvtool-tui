@@ -4,7 +4,10 @@ use std::process::Command;
 use std::process::exit;
 use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::env::current_exe;
+
+use glow::HasContext;
 
 mod backend;
 use backend::_imgui::ImGUI;
@@ -20,11 +23,6 @@ use repository::JsonRepository;
 
 mod task;
 use task::run_copying;
-
-use glow::HasContext;
-
-use imgui::WindowFlags;
-use imgui::Condition;
 
 use crate::models::Root;
 
@@ -44,6 +42,7 @@ use crate::widgets::projects::ProjectsWidget;
 use crate::widgets::configures::ConfiguresWidget;
 use crate::widgets::components::ComponentsWidget;
 use crate::widgets::scripts::ScriptsWidget;
+use crate::widgets::about::AboutWidget;
 use crate::widgets::messagebox::SimpleMessageBox;
 
 use crate::widgets::helper::waiter::WaiterState;
@@ -55,6 +54,8 @@ pub struct Workspace {
 	pub configures_widget: ConfiguresWidget,
 	pub components_widget: ComponentsWidget,
 	pub scripts_widget: ScriptsWidget,
+
+	pub about_widget: AboutWidget,
 }
 
 impl Workspace {
@@ -64,7 +65,9 @@ impl Workspace {
 			projects_widget: ProjectsWidget::new(),
 			configures_widget: ConfiguresWidget::new(),
 			components_widget: ComponentsWidget::new(),
-			scripts_widget: ScriptsWidget::new()
+			scripts_widget: ScriptsWidget::new(),
+
+			about_widget: AboutWidget { title: "О программе mvtool".into(), is_open: false }
 		}
 	}
 }
@@ -80,6 +83,25 @@ impl Systems {
 	}
 }
 
+#[derive(Clone)]
+pub struct SharedRoot {
+    inner: Arc<RwLock<Root>>
+}
+
+impl SharedRoot {
+    pub fn new(root: Root) -> Self {
+        Self { inner: Arc::new(RwLock::new(root)) }
+    }
+
+    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, Root> {
+        self.inner.read().expect("Root lock poisoned")
+    }
+
+    pub fn write(&self) -> std::sync::RwLockWriteGuard<'_, Root> {
+        self.inner.write().expect("Root lock poisoned")
+    }
+}
+
 pub struct Application {
 	event_bus: (mpsc::Sender<AppEvent>, mpsc::Receiver<AppEvent>),
 	systems: Systems,
@@ -90,16 +112,18 @@ pub struct Application {
 	imgui: ImGUI,
 	sdl: SDL2,
 	workspace: Workspace,
-	data: Root
+	data: SharedRoot
 }
 
 impl Application {
 	pub fn new() -> Result<Self, String> {
 		let (sender, receiver) = mpsc::channel();
 
+		let shared_data = SharedRoot::new(Root { projects: Vec::new() });
+
 		let api = Api {
 			sender: sender.clone(),
-			data: Root { projects: Vec::new() }
+			data: shared_data.clone()
 		};
 
 		Ok(Self {
@@ -112,7 +136,7 @@ impl Application {
 			imgui: ImGUI::new(),
 			sdl: SDL2::new()?,
 			workspace: Workspace::new(),
-			data: Root { projects: Vec::new() },
+			data: shared_data,
 		})
 	}
 
@@ -142,7 +166,8 @@ impl Application {
 		let repository = JsonRepository::new("setting.json");
 		match repository.load() {
             Ok(root) => {
-                self.data = root;
+                let mut data = self.data.write();
+                *data = root;
             }
             Err(error) => {
 				let _ = self.event_bus.0.send(AppEvent::Devent(error, MessageType::Error));
@@ -164,8 +189,6 @@ impl Application {
 
 		'running: loop {
 			events_keyboard.clear();
-			self.systems.plugin_loader.api.data = self.data.clone();
-
 			self.sdl.poll_events(|event| {
 				self.imgui.handle_event(&event);
 			    if let sdl2::event::Event::Quit { .. } = event {
@@ -186,32 +209,42 @@ impl Application {
 			}
 
 			self.imgui.paint(|ui, root| {
-				ui.dockspace_over_main_viewport();
+			    ui.dockspace_over_main_viewport();
+			
+			    ui.main_menu_bar(|| {
+			        ui.menu("Файл", || {
+			            ui.menu_item("Менеджер плагинов");
 
-				let flag = WindowFlags::NO_TITLE_BAR
-					| WindowFlags::NO_COLLAPSE
-					| WindowFlags::NO_RESIZE
-					| WindowFlags::NO_MOVE
-					| WindowFlags::NO_NAV_FOCUS
-					| WindowFlags::NO_FOCUS_ON_APPEARING
-					| WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS;
+						ui.separator();
 
-				ui.window("main_window")
-				    .position([0.0, 0.0], Condition::Always)
-				    .size(ui.io().display_size, Condition::Always)
-					.flags(flag)
-				    .build(|| {
-						self.workspace.console_widget.pump_waiter(&mut self.waiter_state);
+						if ui.menu_item("Выход") {
+			                let _ = self.sdl.event().push_event(sdl2::event::Event::Quit { timestamp: 0 });
+			            }
+			        });
 
-						self.workspace.console_widget.draw(ui, root);
-						self.workspace.projects_widget.draw(ui, root);
-						self.workspace.configures_widget.draw(ui, root);
-						self.workspace.components_widget.draw(ui, root);
-						self.workspace.scripts_widget.draw(ui, root);
+			        ui.menu("О программе", || {
+			            if ui.menu_item("Что это?!") {
+							self.workspace.about_widget.is_open = true;
+						}
+					});
+			
+				});
 
-						self.message_box.draw(ui, root);
-				    });
-			}, &mut self.data);
+				/* Рисуем виджеты рабочего пространства */
+				{
+					self.workspace.console_widget.pump_waiter(&mut self.waiter_state);
+			
+					self.workspace.console_widget.draw(ui, root);
+					self.workspace.projects_widget.draw(ui, root);
+					self.workspace.configures_widget.draw(ui, root);
+					self.workspace.components_widget.draw(ui, root);
+					self.workspace.scripts_widget.draw(ui, root);
+			
+					self.workspace.about_widget.draw(ui, root);
+				}
+
+				self.message_box.draw(ui, root);
+			}, &mut self.data.write());
 
 			unsafe {
 				let ctx = opengl.gl_renderer().gl_context();
@@ -311,7 +344,7 @@ impl Application {
 						self.systems.plugin_manager.emit(&self.systems.plugin_loader, "on_action", &mlua::Value::Nil)
 							.map_err(|error| format!("Ошибка выполнения плагинами: {}", error))?;
 
-		                run_copying(self.data.projects.clone(), self.event_bus.0.clone());
+		                run_copying(self.data.read().projects.clone(), self.event_bus.0.clone());
 		            }
 		        }
 

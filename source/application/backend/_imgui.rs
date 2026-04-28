@@ -35,7 +35,6 @@ impl ImGUI {
 
 	pub fn setup_ui(&mut self) {
 		self.context.io_mut().config_flags = ConfigFlags::DOCKING_ENABLE;
-		self.context.io_mut().config_flags.insert(ConfigFlags::NO_MOUSE_CURSOR_CHANGE);
 
 		self.context.set_ini_filename(Some(PathBuf::from("config.ini")));
 
