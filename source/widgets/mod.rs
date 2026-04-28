@@ -13,4 +13,5 @@ pub mod projects;
 pub mod configures;
 pub mod components;
 pub mod scripts;
+pub mod about;
 pub mod messagebox;

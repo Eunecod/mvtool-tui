@@ -2,6 +2,9 @@
 
 use std::path::Path;
 
+use qrcode::QrCode;
+use qrcode::render::unicode;
+
 #[cfg(windows)]
 use register_app_for_toast::register;
 
@@ -28,8 +31,16 @@ pub fn register_aumid(aumid: &str, display_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[expect(unused)]
-pub fn get_bit_depth() -> String
-{
+pub fn bit_depth() -> String {
     return if cfg!(target_pointer_width = "64") { "64-bit".into() } else { "32-bit".into() };
+}
+
+pub fn qrcode(data: &str) -> String {
+    let code = QrCode::new(data).unwrap();
+    let image = code.render::<unicode::Dense1x2>()
+        .dark_color(unicode::Dense1x2::Light)
+        .light_color(unicode::Dense1x2::Dark)
+        .build();
+
+    image
 }

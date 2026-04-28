@@ -7,6 +7,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::env::current_exe;
 
+use glow::HasContext;
+
 mod backend;
 use backend::_imgui::ImGUI;
 use backend::_sdl2::SDL2;
@@ -21,11 +23,6 @@ use repository::JsonRepository;
 
 mod task;
 use task::run_copying;
-
-use glow::HasContext;
-
-use imgui::WindowFlags;
-use imgui::Condition;
 
 use crate::models::Root;
 
@@ -45,6 +42,7 @@ use crate::widgets::projects::ProjectsWidget;
 use crate::widgets::configures::ConfiguresWidget;
 use crate::widgets::components::ComponentsWidget;
 use crate::widgets::scripts::ScriptsWidget;
+use crate::widgets::about::AboutWidget;
 use crate::widgets::messagebox::SimpleMessageBox;
 
 use crate::widgets::helper::waiter::WaiterState;
@@ -56,6 +54,8 @@ pub struct Workspace {
 	pub configures_widget: ConfiguresWidget,
 	pub components_widget: ComponentsWidget,
 	pub scripts_widget: ScriptsWidget,
+
+	pub about_widget: AboutWidget,
 }
 
 impl Workspace {
@@ -65,7 +65,9 @@ impl Workspace {
 			projects_widget: ProjectsWidget::new(),
 			configures_widget: ConfiguresWidget::new(),
 			components_widget: ComponentsWidget::new(),
-			scripts_widget: ScriptsWidget::new()
+			scripts_widget: ScriptsWidget::new(),
+
+			about_widget: AboutWidget { title: "О программе mvtool".into(), is_open: false }
 		}
 	}
 }
@@ -207,31 +209,41 @@ impl Application {
 			}
 
 			self.imgui.paint(|ui, root| {
-				ui.dockspace_over_main_viewport();
+			    ui.dockspace_over_main_viewport();
+			
+			    ui.main_menu_bar(|| {
+			        ui.menu("Файл", || {
+			            ui.menu_item("Менеджер плагинов");
 
-				let flag = WindowFlags::NO_TITLE_BAR
-					| WindowFlags::NO_COLLAPSE
-					| WindowFlags::NO_RESIZE
-					| WindowFlags::NO_MOVE
-					| WindowFlags::NO_NAV_FOCUS
-					| WindowFlags::NO_FOCUS_ON_APPEARING
-					| WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS;
+						ui.separator();
 
-				ui.window("main_window")
-				    .position([0.0, 0.0], Condition::Always)
-				    .size(ui.io().display_size, Condition::Always)
-					.flags(flag)
-				    .build(|| {
-						self.workspace.console_widget.pump_waiter(&mut self.waiter_state);
+						if ui.menu_item("Выход") {
+			                let _ = self.sdl.event().push_event(sdl2::event::Event::Quit { timestamp: 0 });
+			            }
+			        });
 
-						self.workspace.console_widget.draw(ui, root);
-						self.workspace.projects_widget.draw(ui, root);
-						self.workspace.configures_widget.draw(ui, root);
-						self.workspace.components_widget.draw(ui, root);
-						self.workspace.scripts_widget.draw(ui, root);
+			        ui.menu("О программе", || {
+			            if ui.menu_item("Что это?!") {
+							self.workspace.about_widget.is_open = true;
+						}
+					});
+			
+				});
 
-						self.message_box.draw(ui, root);
-				    });
+				/* Рисуем виджеты рабочего пространства */
+				{
+					self.workspace.console_widget.pump_waiter(&mut self.waiter_state);
+			
+					self.workspace.console_widget.draw(ui, root);
+					self.workspace.projects_widget.draw(ui, root);
+					self.workspace.configures_widget.draw(ui, root);
+					self.workspace.components_widget.draw(ui, root);
+					self.workspace.scripts_widget.draw(ui, root);
+			
+					self.workspace.about_widget.draw(ui, root);
+				}
+
+				self.message_box.draw(ui, root);
 			}, &mut self.data.write());
 
 			unsafe {
