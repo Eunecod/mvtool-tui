@@ -2,51 +2,83 @@ name: Rust Release Build
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
 
 env:
   CARGO_TERM_COLOR: always
+  TARGET: pc-x86_64-windows-msvc
 
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
     - uses: actions/checkout@v4
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
-      
-    - name: Build Release
+
+    - name: Get version
+      shell: bash
+      run: |
+        VERSION=$(grep '^version' Cargo.toml | head -1 | sed -E 's/version = "(.*)"/\1/')
+        TAG="v$VERSION"
+
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "TAG=$TAG" >> $GITHUB_ENV
+
+    - name: Check tag exists
+      id: check_tag
+      shell: bash
+      run: |
+        if git ls-remote --tags origin | grep -q "refs/tags/$TAG"; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create tag
+      if: steps.check_tag.outputs.exists == 'false'
+      run: |
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+
+        git tag ${{ env.TAG }}
+        git push origin ${{ env.TAG }}
+
+    - name: Build
       run: cargo build --release --verbose
-      
-    - name: Prepare Asset
+
+    - name: Generate changelog
+      shell: bash
+      run: |
+        echo "CHANGELOG<<EOF" >> $GITHUB_ENV
+        git log --pretty=format:"- %s (%h)" $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD >> $GITHUB_ENV
+        echo "" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+
+    - name: Package
       shell: powershell
       run: |
-        $TAG = "${{ github.ref_name }}"
-        $VERSION = $TAG.TrimStart('v')
-        
-        $RELEASE_TAG = $TAG
-        
-        $ASSET_NAME = "mvtool-x86_64-pc-windows-msvc.tar"
+        $ASSET_NAME = "mvtool-${{ env.TARGET }}.tar"
 
-        New-Item -ItemType Directory -Force -Path "dist"
+        New-Item -ItemType Directory -Force -Path "dist/plugins" | Out-Null
+        New-Item -ItemType File -Path "dist/plugins/.keep" | Out-Null
+
         Copy-Item "target/release/mvtool.exe" -Destination "dist/"
-
-        if (Test-Path "res") { Copy-Item -Recurse "res" -Destination "dist/" }
-        if (Test-Path "icon.ico") { Copy-Item "icon.ico" -Destination "dist/" }
 
         tar -cvf $ASSET_NAME -C dist .
 
-        echo "RELEASE_TAG=$RELEASE_TAG" >> $env:GITHUB_ENV
-        echo "RELEASE_TITLE=Release $VERSION" >> $env:GITHUB_ENV
         echo "ASSET_NAME=$ASSET_NAME" >> $env:GITHUB_ENV
 
-    - name: Upload to Release
+    - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ env.RELEASE_TAG }}
-        name: ${{ env.RELEASE_TITLE }}
+        tag_name: ${{ env.TAG }}
+        name: Release ${{ env.VERSION }}
+        body: |
+          ${{ env.CHANGELOG }}
         files: ${{ env.ASSET_NAME }}
         make_latest: true
       env:
