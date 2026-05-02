@@ -67,7 +67,7 @@ impl Workspace {
 			components_widget: ComponentsWidget::new(),
 			scripts_widget: ScriptsWidget::new(),
 
-			about_widget: AboutWidget { title: "О программе mvtool".into(), is_open: false }
+			about_widget: AboutWidget::new(),
 		}
 	}
 }
@@ -194,7 +194,7 @@ impl Application {
 			    if let sdl2::event::Event::Quit { .. } = event {
 			        running = false;
 			    }
-
+			
 				if let sdl2::event::Event::KeyDown { .. } = event {
 				    events_keyboard.push(event);
 				}
@@ -208,50 +208,50 @@ impl Application {
 				break 'running;
 			}
 
-			self.imgui.paint(|ui, root| {
-			    ui.dockspace_over_main_viewport();
+			unsafe {
+				let ctx = opengl.gl_renderer().gl_context();
 			
-			    ui.main_menu_bar(|| {
-			        ui.menu("Файл", || {
-			            ui.menu_item("Менеджер плагинов");
+				ctx.clear_color(0.1, 0.1, 0.1, 1.0);
+				ctx.clear(glow::COLOR_BUFFER_BIT);
+			}
 
+			self.imgui.paint(|ui, root| {
+				ui.dockspace_over_main_viewport();
+				
+				ui.main_menu_bar(|| {
+				    ui.menu("Файл", || {
+				        ui.menu_item("Менеджер плагинов");
+				
 						ui.separator();
-
+				
 						if ui.menu_item("Выход") {
-			                let _ = self.sdl.event().push_event(sdl2::event::Event::Quit { timestamp: 0 });
-			            }
-			        });
-
-			        ui.menu("О программе", || {
-			            if ui.menu_item("Что это?!") {
+				            let _ = self.sdl.event().push_event(sdl2::event::Event::Quit { timestamp: 0 });
+				        }
+				    });
+				
+				    ui.menu("О программе", || {
+				        if ui.menu_item("Что это?!") {
 							self.workspace.about_widget.is_open = true;
 						}
 					});
-			
+				
 				});
-
+				
 				/* Рисуем виджеты рабочего пространства */
 				{
 					self.workspace.console_widget.pump_waiter(&mut self.waiter_state);
-			
+				
 					self.workspace.console_widget.draw(ui, root);
 					self.workspace.projects_widget.draw(ui, root);
 					self.workspace.configures_widget.draw(ui, root);
 					self.workspace.components_widget.draw(ui, root);
 					self.workspace.scripts_widget.draw(ui, root);
-			
+				
 					self.workspace.about_widget.draw(ui, root);
 				}
-
+			
 				self.message_box.draw(ui, root);
 			}, &mut self.data.write());
-
-			unsafe {
-				let ctx = opengl.gl_renderer().gl_context();
-
-				ctx.clear_color(0.1, 0.1, 0.1, 1.0);
-				ctx.clear(glow::COLOR_BUFFER_BIT);
-			}
 
 			opengl.gl_renderer().render(self.imgui.data())?;
 			self.sdl.swap();

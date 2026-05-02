@@ -39,6 +39,15 @@ impl SDL2 {
 		let gl_context = window.gl_create_context()?;
 		window.gl_make_current(&gl_context)?;
 
+		match video.gl_set_swap_interval(1) {
+            Ok(_) => {
+                println!("Вертикальная синхронизация включена");
+            }
+            Err(error) => {
+				println!("{}", format!("Не удалось включить вертикальную синхронизацию: {}", error));
+            }
+        }
+
 		Ok(Self {
 			video: video,
 			event: sdl.event()?,

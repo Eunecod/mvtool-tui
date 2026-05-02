@@ -65,6 +65,9 @@ impl ImGUI {
 		style.colors[StyleColor::TabActive as usize]		  = [0.0, 0.0, 0.0, 0.0];
 		style.colors[StyleColor::TabHovered as usize]		  = [0.0, 0.0, 0.0, 0.0];
 		style.window_menu_button_position					  = Direction::None;
+
+		style.anti_aliased_lines                              = false;
+		style.anti_aliased_fill                               = false;
 	}
 
 	pub fn context(&mut self) -> &mut Context {

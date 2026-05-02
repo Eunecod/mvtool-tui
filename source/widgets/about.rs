@@ -11,7 +11,18 @@ use crate::models::Root;
 
 pub struct AboutWidget {
 	pub title: String,
+	pub qr: String,
 	pub is_open: bool
+}
+
+impl AboutWidget {
+	pub fn new() -> Self {
+		Self {
+			title: "О программе".into(),
+			qr: qrcode("https://github.com/Eunecod/mvtool-tui"),
+			is_open: false
+		}
+	}
 }
 
 impl Widget<Root> for AboutWidget {
@@ -37,7 +48,7 @@ impl Widget<Root> for AboutWidget {
 				];
 
 				let window_width = ui.window_size()[0];
-
+				
 				for (text, color) in banner {
 					let text_width = ui.calc_text_size(text)[0];
 				
@@ -49,10 +60,8 @@ impl Widget<Root> for AboutWidget {
 					ui.text_colored(color, text);
 				}
 
-				let qr = qrcode("https://github.com/Eunecod/mvtool-tui");
-
 				ui.group(|| {
-					ui.text(&qr);
+					ui.text(&self.qr);
 					ui.text("https://github.com/Eunecod/mvtool-tui");
 				});
 
