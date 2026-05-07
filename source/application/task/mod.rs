@@ -12,7 +12,7 @@ use crate::application::AppEvent;
 
 use crate::widgets::console::MessageType;
 use crate::widgets::helper::waiter::WaiterState;
-use crate::widgets::helper::toast::ToastPayload;
+use crate::widgets::helper::toast::Toast;
 
 use crate::service::is_match;
 
@@ -40,6 +40,12 @@ pub fn run_copying(projects: Vec<Project>, tx: mpsc::Sender<AppEvent>) {
                             for component in &configure.components {
                                 if is_match(&path, &component.name, &configure.extension_mask) {
                                     let _ = fs::remove_file(&path);
+                                    match fs::remove_file(&path) {
+                                        Ok(_) => (),
+                                        Err(error) => {
+                                            let _ = tx.send(AppEvent::Devent(format!("Проблема при удалении '{}': {}", component.name, error), MessageType::Warning));
+                                        },
+                                    }
                                     break;
                                 }
                             }
@@ -97,6 +103,9 @@ pub fn run_copying(projects: Vec<Project>, tx: mpsc::Sender<AppEvent>) {
                         done += 1;
                         let _ = tx.send(AppEvent::Devent(format!("[{}/{}] {}", done, total, file_name), MessageType::Info));
                     }
+                    else {
+                        let _ = tx.send(AppEvent::Devent(format!("Не удалось скопировать '{}'", file_name), MessageType::Warning));
+                    }
                 }
 
                 let _ = tx.send(AppEvent::Devent(format!("Готово {}/{} в '{}'", done, total, dest_path), MessageType::Success));
@@ -108,10 +117,9 @@ pub fn run_copying(projects: Vec<Project>, tx: mpsc::Sender<AppEvent>) {
         }
 
         let _ = tx.send(AppEvent::WaitProcess(WaiterState { tick_count: 0, process: false }));
-        let _ = tx.send(AppEvent::ShowToast(ToastPayload {
+        let _ = tx.send(AppEvent::ShowToast(Toast {
             title: "Копирование завершено".into(),
             message: "Все файлы успешно скопированы".into(),
-            duration: 3.0,
         }));
     });
 }

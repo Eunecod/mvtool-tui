@@ -1,27 +1,34 @@
 // source/widgets/helper/toast.rs
 
-use notify_rust::Notification;
+use notify_rust::{ Notification, Timeout };
 
-pub struct ToastPayload {
+use crate::service::is_registered_aumid;
+
+pub struct Toast {
     pub title: String,
     pub message: String,
-	pub duration: f32,
 }
 
 pub struct ToastWidget;
 
 impl ToastWidget {
-	pub fn show(payload: ToastPayload) {
+	pub fn show(toast: Toast) {
 		let mut notification = Notification::new();
 		#[cfg(windows)]
 		{
-			notification.app_id("com.mvtool.desktop");
+			let aumid = "com.mvtool.desktop";
+
+			if is_registered_aumid(aumid) {
+				notification.app_id(aumid);
+				notification.appname("mvtool");
+			}
 		}
 
-		let _ = notification.appname("mvtool")
-			.summary(&payload.title)
-			.body(&payload.message).timeout((payload.duration * 1000.0) as i32)
-			.auto_icon()
-		.show();
+		notification.summary(&toast.title)
+			.body(&toast.message)
+			.timeout(Timeout::Default)
+			.auto_icon();
+
+		let _ = notification.show();
 	}
 }

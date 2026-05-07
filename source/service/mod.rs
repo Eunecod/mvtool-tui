@@ -6,7 +6,8 @@ use qrcode::QrCode;
 use qrcode::render::unicode;
 
 #[cfg(windows)]
-use register_app_for_toast::register;
+use winreg::enums::HKEY_CURRENT_USER;
+use winreg::RegKey;
 
 pub fn is_match(path: &Path, target_name: &str, extension_mask: &[String]) -> bool
 {
@@ -24,13 +25,6 @@ pub fn is_match(path: &Path, target_name: &str, extension_mask: &[String]) -> bo
     extension_mask.iter().any(|mask| mask.trim_start_matches("*.") == extension)
 }
 
-#[cfg(windows)]
-pub fn register_aumid(aumid: &str, display_name: &str) -> Result<(), String> {
-    register(aumid, "D9E1B73A-4F8A-4B6E-9C3E-2A4D1F8C9E07", Some(display_name)).map_err(|error| error.to_string())?;
-
-    Ok(())
-}
-
 pub fn bit_depth() -> String {
     return if cfg!(target_pointer_width = "64") { "64-bit".into() } else { "32-bit".into() };
 }
@@ -43,4 +37,20 @@ pub fn qrcode(data: &str) -> String {
         .build();
 
     image
+}
+
+#[cfg(windows)]
+pub fn register_aumid(aumid: &str, display_name: &str) -> Result<(), String> {
+    let (key, _) = RegKey::predef(HKEY_CURRENT_USER)
+        .create_subkey(format!(r"SOFTWARE\Classes\AppUserModelId\{}", aumid))
+        .map_err(|error| error.to_string())?;
+
+    key.set_value("DisplayName", &display_name).map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn is_registered_aumid(aumid: &str) -> bool {
+    RegKey::predef(HKEY_CURRENT_USER).open_subkey(&format!(r"Software\Classes\AppUserModelId\{}", aumid)).is_ok()
 }
