@@ -325,8 +325,8 @@ impl Application {
 					self.waiter_state = state;
 				}
 
-				AppEvent::ShowToast(payload) => {
-					ToastWidget::show(payload);
+				AppEvent::ShowToast(toast) => {
+					ToastWidget::show(toast);
 				}
 
 				AppEvent::ShowMessageBox(message_box) => {
