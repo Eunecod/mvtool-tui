@@ -77,13 +77,13 @@ jobs:
     env:
       TARGET: linux-x86_64
       OPENSSL_STATIC: 1
-      OPENSSL_DIR: /usr
+      OPENSSL_VENDORED: 1
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install musl tools
-        run: sudo apt-get update && sudo apt-get install -y musl-tools build-essential pkg-config libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y musl-tools build-essential
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
