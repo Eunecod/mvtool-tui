@@ -64,7 +64,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
-          name: release (${{ needs.prepare.outputs.version }})
+          name: Release ${{ needs.prepare.outputs.version }}
           body: ""
           files: mvtool-${{ env.TARGET }}.tar
           make_latest: true
@@ -76,12 +76,14 @@ jobs:
     needs: [prepare, build-windows]
     env:
       TARGET: linux-x86_64
+      OPENSSL_STATIC: 1
+      OPENSSL_DIR: /usr
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install musl tools
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools build-essential pkg-config libssl-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
