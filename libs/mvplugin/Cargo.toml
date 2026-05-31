@@ -1,0 +1,19 @@
+# Cargo.toml
+
+[package]
+name = "mvplugin"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# lua
+mlua.workspace = true
+
+# async runtime
+tokio.workspace = true
+
+# imgui
+imgui.workspace = true
+
+# libs
+mvcore.workspace = true
