@@ -1,0 +1,28 @@
+# Cargo.toml
+
+[package]
+name = "mvcore"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# async runtime
+tokio.workspace = true
+futures = "0.3.32"
+
+# parse json
+serde.workspace = true
+serde_json.workspace = true
+
+# image
+image = "0.25.10"
+
+# notification
+notify-rust = "4.17.0"
+
+# service
+qrcode = "0.14.1"
+open = "5.3.5"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56.0"

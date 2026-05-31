@@ -1,0 +1,30 @@
+# Cargo.toml
+
+[package]
+name  = "mvtool"
+build = "build.rs"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "mvtool"
+path = "src/main.rs"
+
+[dependencies]
+# async runtime
+tokio.workspace = true
+
+# winit
+winit.workspace = true
+
+# lua
+mlua.workspace = true
+
+# libs
+mvcore.workspace  = true
+mvframe.workspace = true
+mvplugin.workspace = true
+updater.workspace = true
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3.0.8"

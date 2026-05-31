@@ -1,7 +1,10 @@
-# .cargo/Config.toml
+# Config.toml
 
 [env]
 CMAKE_GENERATOR = "Ninja"
 
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-l", "Advapi32"]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.i686-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
