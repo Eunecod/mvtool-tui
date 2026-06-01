@@ -73,7 +73,7 @@ impl Menu {
                 self.index = (self.index + 1).min(items.len() - 1);
             }
 
-            if ui.io().key_ctrl && ui.is_key_pressed(Key::A) {
+            if ui.io().key_ctrl && ui.is_key_pressed_no_repeat(Key::A) {
                 let should_select = items.iter().any(|component| !component.selected());
                 for item in items.iter_mut() {
                     item.set_selected(should_select);
