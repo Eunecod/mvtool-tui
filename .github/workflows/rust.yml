@@ -42,7 +42,7 @@ jobs:
     runs-on: windows-latest
     needs: prepare
     env:
-      TARGET: windows-x86_64
+      TARGET: x86_64-windows
 
     steps:
       - uses: actions/checkout@v4
@@ -68,44 +68,5 @@ jobs:
           body: ""
           files: mvtool-${{ env.TARGET }}.tar
           make_latest: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-linux:
-    runs-on: ubuntu-latest
-    needs: [prepare, build-windows]
-    env:
-      TARGET: linux-x86_64
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install musl tools
-        run: sudo apt-get update && sudo apt-get install -y musl-tools musl-dev build-essential g++-x86-64-linux-gnu
-      - name: Create symlinks for musl toolchain
-        run: |
-          sudo ln -sf /usr/bin/x86_64-linux-gnu-g++ /usr/bin/x86_64-linux-musl-g++
-          sudo ln -sf /usr/bin/x86_64-linux-gnu-gcc /usr/bin/x86_64-linux-musl-gcc
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
-
-      - name: Build
-        run: cargo build --release --target=x86_64-unknown-linux-musl --verbose
-
-      - name: Package
-        shell: bash
-        run: |
-          ASSET_NAME="mvtool-${{ env.TARGET }}.tar"
-          tar -cvf $ASSET_NAME -C target/x86_64-unknown-linux-musl/release mvtool
-          echo "ASSET_NAME=$ASSET_NAME" >> $GITHUB_ENV
-
-      - name: Upload Asset to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.prepare.outputs.tag }}
-          files: mvtool-${{ env.TARGET }}.tar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
