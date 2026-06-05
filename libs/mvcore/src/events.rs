@@ -11,6 +11,7 @@ pub enum Type {
 pub enum Command {
     Devent(String, Type),
     ShowNotification(String, String),
+    ShowMessageBox(String, String, Box<dyn FnOnce() + Send + 'static>),
     Execute(String, String),
     UpdaterReady(crate::session::UpdateSession),
     Update(),

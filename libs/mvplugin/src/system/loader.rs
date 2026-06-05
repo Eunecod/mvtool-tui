@@ -1,5 +1,6 @@
 // libs/mvplugin/src/system/loader.rs
 
+use mlua::Function;
 use mlua::Lua;
 use mlua::Table;
 
@@ -7,6 +8,8 @@ use tokio::sync::mpsc;
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use mvcore::events::Command;
 use mvcore::events::Type;
@@ -15,6 +18,9 @@ use crate::Api;
 use crate::api::Plugin;
 use crate::api::PluginMeta;
 use crate::api::bridge::imgui::with_ui;
+
+struct LuaPtr(*const Lua);
+unsafe impl Send for LuaPtr {}
 
 pub struct PluginLoader {
     pub plugins: HashMap<String, Plugin>,
@@ -164,6 +170,45 @@ impl PluginLoader {
             .map_err(|error| format!("Ошибка загрузки [api: execute]: {}", error))?;
 
         api.set("execute", execute)
+            .map_err(|error| error.to_string())?;
+
+        let tx = self.api.tx.clone();
+
+        /* impl message box */
+        let messagebox = lua
+            .create_function(
+                move |lua, (title, message, action): (String, String, Function)| {
+                    let registry_key = lua.create_registry_value(action)?;
+
+                    let shared_key = Arc::new(Mutex::new(Some(registry_key)));
+                    let shared_key_for_action = shared_key.clone();
+
+                    let lua_wrapper = LuaPtr(lua as *const Lua);
+
+                    let registry_action = Box::new(move || {
+                        let wrapper = lua_wrapper;
+                        let lua_ref = unsafe { &*wrapper.0 };
+
+                        if let Ok(mut guard) = shared_key_for_action.lock() {
+                            if let Some(key) = guard.take() {
+                                if let Ok(lua_func) = lua_ref.registry_value::<Function>(&key) {
+                                    let _ = lua_func.call::<()>(());
+                                }
+
+                                let _ = lua_ref.remove_registry_value(key);
+                            }
+                        }
+                    });
+
+                    let _ =
+                        tx.blocking_send(Command::ShowMessageBox(title, message, registry_action));
+
+                    Ok(())
+                },
+            )
+            .map_err(|error| format!("Ошибка загрузки [api: messagebox]: {}", error))?;
+
+        api.set("messagebox", messagebox)
             .map_err(|error| error.to_string())?;
 
         /* impl imgui */
