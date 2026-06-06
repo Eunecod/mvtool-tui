@@ -35,6 +35,7 @@ use mvframe::widget::AboutWidget;
 use mvframe::widget::ComponentsWidget;
 use mvframe::widget::ConfiguresWidget;
 use mvframe::widget::ConsoleWidget;
+use mvframe::widget::MessageBox;
 use mvframe::widget::PluginManagerWidget;
 use mvframe::widget::PluginWidget;
 use mvframe::widget::ProjectsWidget;
@@ -73,6 +74,8 @@ pub struct Application {
     updates: UpdatesWidget,
     plugins: Vec<PluginWidget>,
     plugin_manager_widget: PluginManagerWidget,
+
+    messagebox: MessageBox,
 }
 
 impl Application {
@@ -111,6 +114,7 @@ impl Application {
             updates: UpdatesWidget::new(tx_updates),
             plugins: Vec::new(),
             plugin_manager_widget: PluginManagerWidget::new(),
+            messagebox: MessageBox::new(),
         }
     }
 
@@ -209,6 +213,12 @@ impl Application {
                 }
                 Command::ShowNotification(title, message) => {
                     mvcore::service::show_notification("mvtool", &title, &message);
+                }
+                Command::ShowMessageBox(title, message, action) => {
+                    self.messagebox = MessageBox::new()
+                        .title(title)
+                        .message(message)
+                        .spawn(action);
                 }
                 Command::Execute(name, command) => {
                     let tx = self.tx.clone();
@@ -412,6 +422,8 @@ impl Application {
                     self.plugin_manager.loader.plugins.values_mut().collect();
 
                 self.plugin_manager_widget.draw(ui, &mut plugins);
+
+                self.messagebox.draw(ui, &mut ());
             });
         }
 
