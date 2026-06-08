@@ -1,55 +1,46 @@
 # Cargo.toml
 
-[package]
-name    = "mvtool"
-version = "2.2.1"
+[workspace]
+members = [
+	"apps/mvtool",
+	"libs/mvcore",
+	"libs/mvframe",
+	"libs/mvplugin",
+	"libs/updater",
+]
+resolver = "2"
+
+[workspace.package]
+version = "2.3.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 
-[[bin]]
-name = "mvtool"
-path = "source/main.rs"
-
 [profile.release]
+codegen-units = 1
 opt-level     = 3
 lto           = true
-codegen-units = 1
-panic         = 'abort'
 strip         = true
+panic         = 'abort'
 
-[dependencies]
-# backend imgui
+[workspace.dependencies]
+# async runtime
+tokio = { version = "1.52.1", features = ["rt", "rt-multi-thread", "macros", "sync", "time", "process", "fs", "io-util"] }
+
+# winit
+winit = "0.30.13"
+
+# imgui
 imgui = { version = "0.12.0", features = ["docking"] }
 
-# backend sld2
-imgui-sdl2-support = "0.13.0"
-sdl2 = { version = "0.37.0", features = ["bundled", "static-link"] }
-
-# backend glow
-imgui-glow-renderer = "0.13.0"
-glow = "0.14.2"
-
-# parse json
-serde = { version = "1.0.149", features = ["derive"] }
-serde_json = "1.0.149"
-
-# service
-notify-rust = "4"
-image = "0.24"
-qrcode = "0.14.1"
-
-# plugin
+# lua
 mlua = { version = "0.10", features = ["luajit", "vendored"] }
 
-# updater
-reqwest = { version = "0.12", features = ["blocking", "json"] }
-semver = "1.0"
-tar = "0.4"
-self-replace = "1.3"
-walkdir = "2.5"
+# parse json
+serde = { version = "1.0.150", features = ["derive"] }
+serde_json = "1.0.150"
 
-[target.'cfg(windows)'.dependencies]
-register_app_for_toast = "0.1.1"
-
-[target.'cfg(windows)'.build-dependencies]
-embed-resource = "3.0.8"
+# libs
+mvcore   = { path = "libs/mvcore"   }
+mvframe  = { path = "libs/mvframe"  }
+mvplugin = { path = "libs/mvplugin" }
+updater  = { path = "libs/updater"  }

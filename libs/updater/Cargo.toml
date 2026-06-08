@@ -1,0 +1,24 @@
+# Cargo.toml
+
+[package]
+name = "updater"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# async runtime
+tokio.workspace = true
+
+# updater
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+semver = "1.0"
+tar = "0.4"
+self-replace = "1.3"
+walkdir = "2.5"
+
+# parse json
+serde.workspace = true
+serde_json.workspace = true
+
+# libs
+mvcore.workspace = true

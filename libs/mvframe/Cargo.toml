@@ -1,0 +1,25 @@
+# Cargo.toml
+
+[package]
+name = "mvframe"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# async runtime
+tokio.workspace = true
+
+# backend imgui
+imgui.workspace = true
+
+# backend winit
+winit.workspace = true
+imgui-winit-support = "0.13.0"
+
+# backend wgpu
+wgpu = "29.0.3"
+imgui-wgpu = "0.28.0"
+
+# libs
+mvcore.workspace = true
+mvplugin.workspace = true
