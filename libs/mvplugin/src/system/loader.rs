@@ -144,6 +144,14 @@ impl PluginLoader {
             )
         })?;
 
+        /* impl version */
+        let version = lua
+            .create_function(move |_, ()| Ok(mvcore::service::version()))
+            .map_err(|error| format!("Ошибка загрузки [api: execute]: {}", error))?;
+
+        api.set("version", version)
+            .map_err(|error| error.to_string())?;
+
         let tx = self.api.tx.clone();
 
         /* impl devent */
