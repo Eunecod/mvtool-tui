@@ -79,7 +79,7 @@ impl Widget<()> for AboutWidget {
 				ui.group(|| {
 					ui.text_colored(yellow, "[esud]");
 					ui.same_line();
-					ui.text(format!("mvtool v{}", env!("CARGO_PKG_VERSION")));
+					ui.text(format!("mvtool v{}", mvcore::service::version()));
 
 					ui.text_colored(gray, "30/01/2026");
 
