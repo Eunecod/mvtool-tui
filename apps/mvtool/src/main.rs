@@ -14,11 +14,29 @@ use mvtool::Application;
 
 mod domain;
 
+#[cfg(target_os = "windows")]
+unsafe extern "system" {
+    fn AttachConsole(dw_process_id: u32) -> i32;
+    fn FreeConsole() -> i32;
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.contains(&"--version".into()) || args.contains(&"-v".into()) {
-        println!("mvtool version {}", mvcore::service::version());
+        #[cfg(target_os = "windows")]
+        unsafe {
+            AttachConsole(0xFFFF_FFFF);
+        }
 
+        use std::io::Write;
+
+        println!("\nmvtool version: {}", mvcore::service::version());
+        let _ = std::io::stdout().flush();
+
+        #[cfg(target_os = "windows")]
+        unsafe {
+            FreeConsole();
+        }
         std::process::exit(0);
     }
 
