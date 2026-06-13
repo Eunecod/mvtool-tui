@@ -27,4 +27,4 @@ mvplugin.workspace = true
 updater.workspace = true
 
 [target.'cfg(windows)'.build-dependencies]
-embed-resource = "3.0.8"
+winresource = "0.1.31"
