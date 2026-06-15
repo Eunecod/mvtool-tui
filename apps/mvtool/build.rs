@@ -7,6 +7,7 @@
 // |_|_|_|\_/|_| |___|___|_| | Лицензия: MIT / Apache 2.0
 //                           |
 
+#[cfg(windows)]
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
