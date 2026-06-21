@@ -72,8 +72,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-linux:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     needs: prepare
+    container:
+      image: ubuntu:18.04
     env:
       TARGET: x86_64-linux
 
