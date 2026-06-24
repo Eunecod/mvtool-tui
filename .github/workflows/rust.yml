@@ -51,9 +51,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build
-        run: |
-          . $HOME/.cargo/env
-          cargo build --release --verbose
+        run: cargo build --release --verbose
 
       - name: Package
         shell: powershell
@@ -109,7 +107,9 @@ jobs:
           echo "/root/.cargo/bin" >> $GITHUB_PATH
 
       - name: Build
-        run: cargo build --release --verbose
+        run: |
+          . $HOME/.cargo/env
+          cargo build --release --verbose
 
       - name: Package
         run: |
