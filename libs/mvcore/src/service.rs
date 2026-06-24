@@ -20,6 +20,10 @@ const AUMID_PATH: &str = r"SOFTWARE\Classes\AppUserModelId";
 #[cfg(windows)]
 const NOTIFICATION_AUMID: &str = "com.mvtool.desktop";
 
+pub fn version() -> String {
+    env!("CARGO_PKG_VERSION").into()
+}
+
 pub fn load_icon(raw_data: &[u8]) -> RgbaImage {
     image::load_from_memory(raw_data)
         .map(|buffer| buffer.into_rgba8())
