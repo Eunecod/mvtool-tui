@@ -76,12 +76,35 @@ jobs:
     needs: prepare
     env:
       TARGET: x86_64-linux
+    container:
+      image: debian:10-slim
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Configure Debian 10 repositories
+        run: |
+          cat > /etc/apt/sources.list << EOF
+          deb http://archive.debian.org/debian buster main contrib non-free
+          deb http://archive.debian.org/debian-security buster/updates main contrib non-free
+          deb http://archive.debian.org/debian buster-updates main contrib non-free
+          EOF
+
+      - name: Install build dependencies
+        run: |
+          apt-get update -o Acquire::Check-Valid-Until=false
+          apt-get install -y \
+            curl \
+            build-essential \
+            pkg-config \
+            libssl-dev \
+            ca-certificates \
+            git
+
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "/root/.cargo/bin" >> $GITHUB_PATH
 
       - name: Build
         run: cargo build --release --verbose
