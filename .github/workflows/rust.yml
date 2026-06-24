@@ -51,7 +51,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build
-        run: cargo build --release --verbose
+        run: |
+          . $HOME/.cargo/env
+          cargo build --release --verbose
 
       - name: Package
         shell: powershell
