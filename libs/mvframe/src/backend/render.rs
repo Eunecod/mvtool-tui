@@ -36,7 +36,13 @@ pub struct RenderContext {
 
 impl RenderContext {
     pub async fn new(context: &mut Context, window: &Window) -> Self {
-        let instance = Instance::default();
+        let instance = Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            flags: Default::default(),
+            memory_budget_thresholds: Default::default(),
+            backend_options: Default::default(),
+            display: None,
+        });
 
         let window_static: &'static Window = unsafe { std::mem::transmute(window) };
         let surface = instance
