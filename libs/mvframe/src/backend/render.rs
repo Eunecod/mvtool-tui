@@ -37,7 +37,7 @@ pub struct RenderContext {
 impl RenderContext {
     pub async fn new(context: &mut Context, window: &Window) -> Self {
         let instance = Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: wgpu::Backends::VULKAN,
             flags: Default::default(),
             memory_budget_thresholds: Default::default(),
             backend_options: Default::default(),
