@@ -36,13 +36,7 @@ pub struct RenderContext {
 
 impl RenderContext {
     pub async fn new(context: &mut Context, window: &Window) -> Self {
-        let instance = Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
-            flags: Default::default(),
-            memory_budget_thresholds: Default::default(),
-            backend_options: Default::default(),
-            display: None,
-        });
+        let instance = Instance::default();
 
         let window_static: &'static Window = unsafe { std::mem::transmute(window) };
         let surface = instance
@@ -51,7 +45,7 @@ impl RenderContext {
 
         let adapter = instance
             .request_adapter(&RequestAdapterOptions {
-                power_preference: PowerPreference::None,
+                power_preference: PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
