@@ -175,8 +175,15 @@ impl PluginLoader {
 
         /* impl devent */
         let devent = lua
-            .create_function(move |_, message: String| {
-                let _ = tx.blocking_send(Command::Devent(message, Type::Message));
+            .create_function(move |_, (message, message_type_str): (String, String)| {
+                let message_type = match message_type_str.as_str() {
+                    "Error" => Type::Error,
+                    "Warning" => Type::Warning,
+                    "Success" => Type::Success,
+                    "Message" | _ => Type::Message,
+                };
+
+                let _ = tx.blocking_send(Command::Devent(message, message_type));
 
                 Ok(())
             })
