@@ -23,6 +23,7 @@ notify-rust = "4.17.0"
 # service
 qrcode = "0.14.1"
 open = "5.3.5"
+semver = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56.0"

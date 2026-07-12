@@ -9,6 +9,7 @@ pub struct PluginMeta {
     pub version: String,
     pub author: String,
     pub description: String,
+    pub requirement: String,
 }
 
 pub struct Plugin {
