@@ -16,9 +16,10 @@ imgui.workspace = true
 winit.workspace = true
 imgui-winit-support = "0.13.0"
 
-# backend wgpu
-wgpu = "29.0.3"
-imgui-wgpu = "0.28.0"
+# backend opengl
+glutin = "0.32.3"
+glutin-winit = "0.5.0"
+imgui-glow-renderer = "0.13.0"
 
 # libs
 mvcore.workspace = true
