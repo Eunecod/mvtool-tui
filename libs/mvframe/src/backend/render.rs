@@ -1,149 +1,185 @@
-// libs/mvframe/src/backend/canvas.rs
+// libs/mvframe/src/backend/render.rs
 
 use imgui::Context;
 use imgui::DrawData;
 
-use wgpu::Color;
-use wgpu::CommandEncoderDescriptor;
-use wgpu::Device;
-use wgpu::DeviceDescriptor;
-use wgpu::Instance;
-use wgpu::LoadOp;
-use wgpu::Operations;
-use wgpu::PowerPreference;
-use wgpu::Queue;
-use wgpu::RenderPassColorAttachment;
-use wgpu::RenderPassDescriptor;
-use wgpu::RequestAdapterOptions;
-use wgpu::StoreOp;
-use wgpu::Surface;
-use wgpu::SurfaceConfiguration;
-use wgpu::TextureUsages;
-use wgpu::TextureViewDescriptor;
+use std::num::NonZeroU32;
 
-use imgui_wgpu::Renderer;
-use imgui_wgpu::RendererConfig;
+use imgui_glow_renderer::glow;
+use imgui_glow_renderer::glow::HasContext;
+
+use imgui_glow_renderer::Renderer;
+use imgui_glow_renderer::SimpleTextureMap;
+
+use glutin::config::ConfigTemplateBuilder;
+use glutin::config::GlConfig;
+
+use glutin::context::ContextApi;
+use glutin::context::ContextAttributesBuilder;
+use glutin::context::NotCurrentGlContext;
+use glutin::context::PossiblyCurrentContext;
+
+use glutin::display::GlDisplay;
+use glutin::surface::GlSurface;
+use glutin::surface::Surface;
+use glutin::surface::WindowSurface;
+
+use winit::raw_window_handle::HasDisplayHandle;
+use winit::raw_window_handle::HasWindowHandle;
 
 use winit::window::Window;
 
 pub struct RenderContext {
-    surface: Surface<'static>,
-    surface_config: SurfaceConfiguration,
-    device: Device,
-    queue: Queue,
+    gl_context: PossiblyCurrentContext,
+    gl_surface: Surface<WindowSurface>,
+    glow_context: glow::Context,
     renderer: Renderer,
+    texture_map: SimpleTextureMap,
 }
 
 impl RenderContext {
-    pub async fn new(context: &mut Context, window: &Window) -> Self {
-        let instance = Instance::default();
+    pub async fn new(imgui_context: &mut Context, window: &Window) -> Self {
+        let display_handle = window.display_handle().unwrap().as_raw();
+        let window_handle = window.window_handle().unwrap().as_raw();
 
-        let window_static: &'static Window = unsafe { std::mem::transmute(window) };
-        let surface = instance
-            .create_surface(window_static)
-            .expect("Failed to create surface");
+        let display = unsafe {
+            #[cfg(target_os = "windows")]
+            {
+                glutin::display::Display::new(
+                    display_handle,
+                    glutin::display::DisplayApiPreference::Wgl(Some(window_handle)),
+                )
+                .or_else(|_| {
+                    glutin::display::Display::new(
+                        display_handle,
+                        glutin::display::DisplayApiPreference::Egl,
+                    )
+                })
+                .expect("Failed to create GL display (WGL/EGL)")
+            }
 
-        let adapter = instance
-            .request_adapter(&RequestAdapterOptions {
-                power_preference: PowerPreference::HighPerformance,
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .expect("Failed to request adapter");
+            #[cfg(not(target_os = "windows"))]
+            {
+                glutin::display::Display::new(
+                    display_handle,
+                    glutin::display::DisplayApiPreference::Egl,
+                )
+                .expect("Failed to create GL display (EGL)")
+            }
+        };
 
-        let (device, queue) = adapter
-            .request_device(&DeviceDescriptor {
-                label: Some("Mvframe Render Device"),
-                ..Default::default()
-            })
-            .await
-            .expect("Failed to request device");
+        let template = ConfigTemplateBuilder::new().with_alpha_size(8);
+        let config = unsafe {
+            display
+                .find_configs(template.build())
+                .unwrap()
+                .reduce(|accum, config| {
+                    if config.num_samples() > accum.num_samples() {
+                        config
+                    } else {
+                        accum
+                    }
+                })
+                .expect("No available GL configurations")
+        };
+
+        let context_attributes = ContextAttributesBuilder::new()
+            .with_context_api(ContextApi::OpenGl(Some(glutin::context::Version {
+                major: 3,
+                minor: 3,
+            })))
+            .with_profile(glutin::context::GlProfile::Core)
+            .build(Some(window_handle));
+
+        let not_current_gl_context = unsafe {
+            display
+                .create_context(&config, &context_attributes)
+                .expect("Failed to create OpenGL context")
+        };
 
         let size = window.inner_size();
-        let surface_caps = surface.get_capabilities(&adapter);
-        let texture_format = surface_caps.formats[0];
+        let attrs = glutin::surface::SurfaceAttributesBuilder::<WindowSurface>::new().build(
+            window_handle,
+            NonZeroU32::new(size.width).unwrap_or(NonZeroU32::MIN),
+            NonZeroU32::new(size.height).unwrap_or(NonZeroU32::MIN),
+        );
 
-        let surface_config = SurfaceConfiguration {
-            usage: TextureUsages::RENDER_ATTACHMENT,
-            format: texture_format,
-            width: size.width.max(1),
-            height: size.height.max(1),
-            present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
+        let gl_surface = unsafe {
+            display
+                .create_window_surface(&config, &attrs)
+                .expect("Failed to create GL window surface")
         };
 
-        surface.configure(&device, &surface_config);
+        let gl_context = not_current_gl_context
+            .make_current(&gl_surface)
+            .expect("Failed to make OpenGL context current");
 
-        let config = RendererConfig {
-            texture_format,
-            ..RendererConfig::default()
+        gl_surface
+            .set_swap_interval(
+                &gl_context,
+                glutin::surface::SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
+            )
+            .expect("Failed to set swap interval (V-Sync)");
+
+        let glow_context = unsafe {
+            glow::Context::from_loader_function(|s| {
+                let symbol = std::ffi::CString::new(s).unwrap();
+                display.get_proc_address(symbol.as_c_str()).cast()
+            })
         };
-        let renderer = Renderer::new(context, &device, &queue, config);
+        unsafe {
+            glow_context.enable(glow::FRAMEBUFFER_SRGB);
+            glow_context.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MIN_FILTER,
+                glow::NEAREST as i32,
+            );
+            glow_context.tex_parameter_i32(
+                glow::TEXTURE_2D,
+                glow::TEXTURE_MAG_FILTER,
+                glow::NEAREST as i32,
+            );
+        }
+
+        let mut texture_map = SimpleTextureMap::default();
+
+        let renderer = Renderer::new(&glow_context, imgui_context, &mut texture_map, false)
+            .expect("Failed to initialize ImGui Glow renderer");
 
         Self {
-            surface,
-            surface_config,
-            device,
-            queue,
+            gl_context,
+            gl_surface,
+            glow_context,
             renderer,
+            texture_map,
         }
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
-            self.surface_config.width = width;
-            self.surface_config.height = height;
+            let w = NonZeroU32::new(width).unwrap();
+            let h = NonZeroU32::new(height).unwrap();
+            self.gl_surface.resize(&self.gl_context, w, h);
 
-            self.surface.configure(&self.device, &self.surface_config);
+            unsafe {
+                self.glow_context
+                    .viewport(0, 0, width as i32, height as i32);
+            }
         }
     }
 
     pub fn render(&mut self, draw_data: &DrawData) {
-        let current_texture = self.surface.get_current_texture();
-
-        let surface_texture = match current_texture {
-            wgpu::CurrentSurfaceTexture::Success(texture) => texture,
-            _ => return,
-        };
-        let view = surface_texture
-            .texture
-            .create_view(&TextureViewDescriptor::default());
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("Mvframe Render Encoder"),
-            });
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Mvframe UI Pass"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(Color {
-                            r: 0.1,
-                            g: 0.1,
-                            b: 0.1,
-                            a: 1.0,
-                        }),
-                        store: StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                ..Default::default()
-            });
-
-            let _ = self
-                .renderer
-                .render(draw_data, &self.queue, &self.device, &mut render_pass);
+        unsafe {
+            self.glow_context.clear_color(0.1, 0.1, 0.1, 1.0);
+            self.glow_context.clear(glow::COLOR_BUFFER_BIT);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
-        surface_texture.present();
+        self.renderer
+            .render(&self.glow_context, &self.texture_map, draw_data)
+            .expect("Failed to render ImGui draw data");
+
+        self.gl_surface
+            .swap_buffers(&self.gl_context)
+            .expect("Failed to swap buffers");
     }
 }

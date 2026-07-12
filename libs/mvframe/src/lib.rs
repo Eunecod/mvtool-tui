@@ -16,4 +16,3 @@ pub use widget::ComponentsWidget;
 pub use widget::ConfiguresWidget;
 pub use widget::ConsoleWidget;
 pub use widget::ProjectsWidget;
-pub use widget::TabmenuWidget;

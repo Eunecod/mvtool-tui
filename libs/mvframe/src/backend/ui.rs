@@ -47,6 +47,7 @@ impl UiState {
             size_pixels: 20.0,
             config: Some(FontConfig {
                 glyph_ranges: FontGlyphRanges::from_slice(&[0x0020, 0xFFFF, 0]),
+                pixel_snap_h: true,
                 ..FontConfig::default()
             }),
         }]);
