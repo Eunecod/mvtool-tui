@@ -253,6 +253,19 @@ impl PluginLoader {
             .set("button", imgui_button)
             .map_err(|error| error.to_string())?;
 
+        let imgui_menu_item = lua
+            .create_function(|_, item_name: String| unsafe {
+                with_ui(|ui| {
+                    let clicked = ui.menu_item(item_name);
+                    Ok(clicked)
+                })
+            })
+            .map_err(|error| format!("Ошибка загрузки [api: imgui_menu_item]: {}", error))?;
+
+        imgui
+            .set("menu_item", imgui_menu_item)
+            .map_err(|error| error.to_string())?;
+
         api.set("imgui", imgui).map_err(|error| error.to_string())?;
 
         Ok(api)

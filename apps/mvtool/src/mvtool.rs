@@ -40,9 +40,11 @@ use mvframe::widget::PluginManagerWidget;
 use mvframe::widget::PluginWidget;
 use mvframe::widget::ProjectsWidget;
 use mvframe::widget::ScriptsWidget;
-use mvframe::widget::TabmenuWidget;
 use mvframe::widget::UpdatesWidget;
 use mvframe::widget::Widget;
+
+use mvframe::widget::plugins::ItemMenuData;
+use mvframe::widget::plugins::ItemMenuPlugins;
 
 use mvplugin::api::Plugin;
 use mvplugin::system::PluginManager;
@@ -65,7 +67,6 @@ pub struct Application {
     data: SharedData,
 
     about: AboutWidget,
-    tabmenu: TabmenuWidget,
     console: ConsoleWidget,
     projects: ProjectsWidget,
     configures: ConfiguresWidget,
@@ -73,6 +74,7 @@ pub struct Application {
     scripts: ScriptsWidget,
     updates: UpdatesWidget,
     plugins: Vec<PluginWidget>,
+    item_menu_plugins: Vec<ItemMenuData>,
     plugin_manager_widget: PluginManagerWidget,
 
     messagebox: MessageBox,
@@ -88,7 +90,6 @@ impl Application {
             .expect("Failed to create runtime");
 
         let tx_plugins = tx.clone();
-        let tx_tabmenu = tx.clone();
         let tx_scripts = tx.clone();
         let tx_updates = tx.clone();
 
@@ -105,7 +106,6 @@ impl Application {
                 projects: Vec::new(),
             }),
             about: AboutWidget::new(),
-            tabmenu: TabmenuWidget::new(tx_tabmenu),
             console: ConsoleWidget::new(),
             projects: ProjectsWidget::new(),
             configures: ConfiguresWidget::new(),
@@ -113,6 +113,7 @@ impl Application {
             scripts: ScriptsWidget::new(tx_scripts),
             updates: UpdatesWidget::new(tx_updates),
             plugins: Vec::new(),
+            item_menu_plugins: Vec::new(),
             plugin_manager_widget: PluginManagerWidget::new(),
             messagebox: MessageBox::new(),
         }
@@ -166,6 +167,9 @@ impl Application {
                 let table = plugin.hook();
                 if let Ok(_) = table.get::<mlua::Function>("build") {
                     self.plugins.push(PluginWidget::new(&name));
+                }
+                if let Ok(_) = table.get::<mlua::Function>("menu") {
+                    self.item_menu_plugins.push(ItemMenuData::new(&name));
                 }
             }
         }
@@ -391,11 +395,45 @@ impl Application {
             self.ui.build(window, |ui| {
                 ui.dockspace_over_main_viewport();
 
-                self.tabmenu.draw(ui, &mut ());
                 self.console.draw(ui, &mut ());
                 {
                     let mut data = self.data.write();
                     self.projects.draw(ui, &mut data.projects);
+
+                    ui.main_menu_bar(|| {
+                        ui.menu("Файл", || {
+                            if ui.menu_item("Менеджер плагинов") {
+                                let _ = self.tx.blocking_send(Command::PluginManager());
+                            }
+                            if ui.menu_item("Настройки") {}
+
+                            ui.separator();
+
+                            if ui.menu_item("Выход") {
+                                let _ = self.tx.blocking_send(Command::Exit());
+                            }
+                        });
+
+                        if !self.item_menu_plugins.is_empty() {
+                            ui.menu("Плагины", || {
+                                for item_menu in &mut self.item_menu_plugins {
+                                    if let Some(_) = ui.begin_menu(&item_menu.title) {
+                                        let mut widget = ItemMenuPlugins {
+                                            data: item_menu,
+                                            plugin_manager: &mut self.plugin_manager,
+                                        };
+                                        widget.draw(ui, &mut data.projects);
+                                    }
+                                }
+                            });
+                        }
+
+                        ui.menu("О программе", || {
+                            if ui.menu_item("Что это?!") {
+                                let _ = self.tx.blocking_send(Command::About());
+                            }
+                        });
+                    });
 
                     for plugin in &mut self.plugins {
                         plugin.draw(ui, &self.plugin_manager, &mut data.projects);
