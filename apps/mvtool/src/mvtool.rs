@@ -559,6 +559,18 @@ impl ApplicationHandler for Application {
             } => {
                 let _ = self.tx.blocking_send(Command::Exit());
             }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let winit::keyboard::PhysicalKey::Code(key_code) = event.physical_key {
+                    let imgui_key = self.ui.key(key_code);
+
+                    if let Some(key) = imgui_key {
+                        self.ui
+                            .context()
+                            .io_mut()
+                            .add_key_event(key, event.state.is_pressed());
+                    }
+                }
+            }
             WindowEvent::RedrawRequested => {
                 self.render();
             }

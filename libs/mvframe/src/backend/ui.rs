@@ -62,6 +62,13 @@ impl UiState {
         &mut self.context
     }
 
+    pub fn key(&self, key_code: winit::keyboard::KeyCode) -> Option<imgui::Key> {
+        match key_code {
+            winit::keyboard::KeyCode::KeyA => Some(imgui::Key::A),
+            _ => None,
+        }
+    }
+
     pub fn build<FBuilder>(&mut self, window: &Window, callback: FBuilder)
     where
         FBuilder: FnOnce(&mut Ui),
