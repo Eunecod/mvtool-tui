@@ -67,6 +67,20 @@ impl PluginLoader {
 
         let meta = self.load_meta(&code);
 
+        if meta.requirement.is_empty() {
+            return Err(format!(
+                "У плагина '{}' отсутствует требование к версии, попробуйте обновить плагин",
+                name
+            ));
+        }
+
+        if PluginLoader::is_support_version(&meta.requirement) {
+            return Err(format!(
+                "Плагин '{}' требует версию {}, которая не поддерживается текущей системой",
+                name, meta.requirement
+            ));
+        }
+
         let lua = Lua::new();
         let globals = lua.globals();
 
@@ -106,6 +120,10 @@ impl PluginLoader {
         Ok(())
     }
 
+    fn is_support_version(target_version: &str) -> bool {
+        mvcore::service::is_newer_version(target_version)
+    }
+
     fn load_meta(&mut self, code: &String) -> PluginMeta {
         let mut meta = PluginMeta::default();
         for line in code.lines() {
@@ -127,6 +145,7 @@ impl PluginLoader {
                         "@version" => meta.version = clean_value,
                         "@author" => meta.author = clean_value,
                         "@description" => meta.description = clean_value,
+                        "@requirement" => meta.requirement = clean_value,
                         _ => {}
                     }
                 }
@@ -156,8 +175,15 @@ impl PluginLoader {
 
         /* impl devent */
         let devent = lua
-            .create_function(move |_, message: String| {
-                let _ = tx.blocking_send(Command::Devent(message, Type::Message));
+            .create_function(move |_, (message, message_type_str): (String, String)| {
+                let message_type = match message_type_str.as_str() {
+                    "Error" => Type::Error,
+                    "Warning" => Type::Warning,
+                    "Success" => Type::Success,
+                    "Message" | _ => Type::Message,
+                };
+
+                let _ = tx.blocking_send(Command::Devent(message, message_type));
 
                 Ok(())
             })

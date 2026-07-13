@@ -175,13 +175,7 @@ impl Updater {
     }
 
     pub fn is_update_available(&self) -> bool {
-        if let (Ok(current), Ok(new)) = (
-            semver::Version::parse(&mvcore::service::version()),
-            semver::Version::parse(self.release.tag_name.trim_start_matches('v')),
-        ) {
-            return new > current;
-        }
-        false
+        mvcore::service::is_newer_version(self.release.tag_name.trim_start_matches('v'))
     }
 
     fn target_triple() -> String {

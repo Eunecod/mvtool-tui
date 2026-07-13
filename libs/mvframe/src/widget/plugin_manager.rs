@@ -42,10 +42,12 @@ impl Widget<Vec<&mut Plugin>> for PluginManagerWidget {
                 for plugin in plugins {
                     ui.separator();
 
-                    ui.text(format!("name: {}", &plugin.meta.name));
-                    ui.text(format!("version: {}", &plugin.meta.version));
-                    ui.text(format!("author: {}", &plugin.meta.author));
-                    ui.text(format!("description: {}", &plugin.meta.description));
+                    ui.text(format!("Название:         {}", &plugin.meta.name));
+                    ui.text(format!("Версия плагина:   {}", &plugin.meta.version));
+                    ui.text(format!("Автор плагина:    {}", &plugin.meta.author));
+                    ui.text(format!("Описание плагина: {}", &plugin.meta.description));
+                    ui.text("");
+                    ui.text(format!("Зависимость:      {}", &plugin.meta.requirement));
 
                     ui.checkbox(
                         &format!("Активировать##item_{}", plugin.meta.name),

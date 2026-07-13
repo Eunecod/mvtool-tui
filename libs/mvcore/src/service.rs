@@ -106,3 +106,14 @@ pub fn is_match(path: &Path, target_name: &str, extension_mask: &[String]) -> bo
         .iter()
         .any(|mask| mask.trim_start_matches("*.") == extension)
 }
+
+pub fn is_newer_version(target_version: &str) -> bool {
+    if let (Ok(current), Ok(target)) = (
+        semver::Version::parse(&version()),
+        semver::Version::parse(target_version),
+    ) {
+        return target > current;
+    }
+
+    false
+}
