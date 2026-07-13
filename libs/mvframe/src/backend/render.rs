@@ -1,5 +1,6 @@
 // libs/mvframe/src/backend/render.rs
 
+use glutin::config::ColorBufferType;
 use imgui::Context;
 use imgui::DrawData;
 
@@ -68,7 +69,13 @@ impl RenderContext {
             }
         };
 
-        let template = ConfigTemplateBuilder::new().with_alpha_size(8);
+        let template = ConfigTemplateBuilder::new()
+            .with_alpha_size(8)
+            .with_buffer_type(ColorBufferType::Rgb {
+                r_size: 8,
+                g_size: 8,
+                b_size: 8,
+            });
         let config = unsafe {
             display
                 .find_configs(template.build())
@@ -128,7 +135,6 @@ impl RenderContext {
             })
         };
         unsafe {
-            glow_context.enable(glow::FRAMEBUFFER_SRGB);
             glow_context.tex_parameter_i32(
                 glow::TEXTURE_2D,
                 glow::TEXTURE_MIN_FILTER,
@@ -143,7 +149,7 @@ impl RenderContext {
 
         let mut texture_map = SimpleTextureMap::default();
 
-        let renderer = Renderer::new(&glow_context, imgui_context, &mut texture_map, false)
+        let renderer = Renderer::new(&glow_context, imgui_context, &mut texture_map, true)
             .expect("Failed to initialize ImGui Glow renderer");
 
         Self {
