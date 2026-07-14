@@ -60,7 +60,7 @@ impl PluginLoader {
                     .api
                     .tx
                     .blocking_send(Command::Devent(error, Type::Warning));
-            };
+            }
         }
 
         Ok(())
