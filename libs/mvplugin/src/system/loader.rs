@@ -269,7 +269,7 @@ impl PluginLoader {
         let imgui_button = lua
             .create_function(|_, text: String| unsafe {
                 with_ui(|ui| {
-                    let clicked = ui.button(text);
+                    let clicked = ui.button_with_size(text, [-1.0, 0.0]);
                     Ok(clicked)
                 })
             })
