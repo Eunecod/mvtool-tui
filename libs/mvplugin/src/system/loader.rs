@@ -55,7 +55,12 @@ impl PluginLoader {
                 .ok_or_else(|| format!("Невалидное имя файла: {:?}", path))?
                 .to_string();
 
-            self.load(&path, &name)?;
+            if let Err(error) = self.load(&path, &name) {
+                let _ = self
+                    .api
+                    .tx
+                    .blocking_send(Command::Devent(error, Type::Warning));
+            };
         }
 
         Ok(())
