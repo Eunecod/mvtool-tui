@@ -7,6 +7,7 @@
 // |_|_|_|\_/|_| |___|___|_| | Лицензия: MIT / Apache 2.0
 //                           |
 
+pub mod adapter;
 pub mod events;
 pub mod io;
 pub mod service;
