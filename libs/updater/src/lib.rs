@@ -28,7 +28,6 @@ use reqwest::Client;
 use reqwest::header::USER_AGENT;
 
 const BINARYNAME: &str = "mvtool";
-const URL: &str = "https://api.github.com/repos/Eunecod/mvtool-tui/releases/latest";
 
 pub struct Updater {
     client: Client,
@@ -36,14 +35,14 @@ pub struct Updater {
 }
 
 impl Updater {
-    pub async fn new() -> Result<Self, String> {
+    pub async fn new(url_repository: &str) -> Result<Self, String> {
         let client = Client::builder()
             .timeout(Duration::from_secs(15))
             .build()
             .map_err(|error| format!("Ошибка создания клиента обновления: {}", error))?;
 
         let release: Release = client
-            .get(URL)
+            .get(url_repository)
             .header(USER_AGENT, BINARYNAME)
             .send()
             .await
