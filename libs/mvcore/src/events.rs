@@ -17,6 +17,7 @@ pub enum Command {
     Update(),
     Copyng(),
     PluginManager(),
+    Settings(),
     About(),
     Exit(),
 }

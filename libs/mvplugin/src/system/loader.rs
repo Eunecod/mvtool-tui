@@ -55,7 +55,12 @@ impl PluginLoader {
                 .ok_or_else(|| format!("Невалидное имя файла: {:?}", path))?
                 .to_string();
 
-            self.load(&path, &name)?;
+            if let Err(error) = self.load(&path, &name) {
+                let _ = self
+                    .api
+                    .tx
+                    .blocking_send(Command::Devent(error, Type::Warning));
+            }
         }
 
         Ok(())
@@ -269,7 +274,7 @@ impl PluginLoader {
         let imgui_button = lua
             .create_function(|_, text: String| unsafe {
                 with_ui(|ui| {
-                    let clicked = ui.button(text);
+                    let clicked = ui.button_with_size(text, [-1.0, 0.0]);
                     Ok(clicked)
                 })
             })
