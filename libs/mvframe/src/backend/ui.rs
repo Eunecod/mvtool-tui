@@ -17,7 +17,17 @@ use winit::event::Event;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-use std::path::PathBuf;
+struct ImguiClipboardBridge(mvcore::adapter::AdapterClipboard);
+
+impl imgui::ClipboardBackend for ImguiClipboardBridge {
+    fn get(&mut self) -> Option<String> {
+        self.0.get()
+    }
+
+    fn set(&mut self, text: &str) {
+        self.0.set(text);
+    }
+}
 
 pub struct UiState {
     platform: WinitPlatform,
@@ -35,8 +45,14 @@ impl UiState {
 
     pub fn setup(&mut self) {
         self.context.io_mut().config_flags |= ConfigFlags::DOCKING_ENABLE;
+        self.context.set_ini_filename(None);
         self.context
-            .set_ini_filename(Some(PathBuf::from("config.ini")));
+            .set_clipboard_backend(ImguiClipboardBridge(mvcore::adapter::AdapterClipboard));
+
+        let Ok(content) = std::fs::read_to_string("config.ini") else {
+            return;
+        };
+        self.context.load_ini_settings(&content);
 
         self.setup_style();
     }
@@ -65,6 +81,8 @@ impl UiState {
     pub fn key(&self, key_code: winit::keyboard::KeyCode) -> Option<imgui::Key> {
         match key_code {
             winit::keyboard::KeyCode::KeyA => Some(imgui::Key::A),
+            winit::keyboard::KeyCode::KeyC => Some(imgui::Key::C),
+            winit::keyboard::KeyCode::KeyV => Some(imgui::Key::V),
             _ => None,
         }
     }
