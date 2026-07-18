@@ -18,6 +18,7 @@ pub mod plugin_manager;
 pub mod plugins;
 pub mod projects;
 pub mod scripts;
+pub mod settings;
 pub mod updates;
 
 pub use about::AboutWidget;
@@ -30,4 +31,5 @@ pub use plugin_manager::PluginManagerWidget;
 pub use plugins::ItemMenuPlugins;
 pub use projects::ProjectsWidget;
 pub use scripts::ScriptsWidget;
+pub use settings::SettingsWidget;
 pub use updates::UpdatesWidget;

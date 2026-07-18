@@ -1,5 +1,7 @@
 // mvtool/src/mvtool.rs
 
+use mvframe::widget::SettingsWidget;
+use mvframe::widget::settings::SettingsData;
 use tokio::process::Command as AsyncCommand;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
@@ -24,9 +26,11 @@ use mvcore::events::Type;
 
 use mvcore::session::UpdateSession;
 
+use mvcore::io::ApplicationSetting;
 use mvcore::io::JsonRepository;
 use mvcore::io::Repository;
 use mvcore::io::Root;
+use mvcore::io::Setting;
 
 use mvframe::backend::RenderContext;
 use mvframe::backend::UiState;
@@ -65,6 +69,7 @@ pub struct Application {
     window: Option<Window>,
     update_session: Option<UpdateSession>,
     data: SharedData,
+    setting: ApplicationSetting,
 
     about: AboutWidget,
     console: ConsoleWidget,
@@ -78,6 +83,7 @@ pub struct Application {
     plugin_manager_widget: PluginManagerWidget,
 
     messagebox: MessageBox,
+    is_open_settings: bool,
 }
 
 impl Application {
@@ -105,6 +111,10 @@ impl Application {
             data: SharedData::new(Root {
                 projects: Vec::new(),
             }),
+            setting: ApplicationSetting {
+                url_repository: "https://api.github.com/repos/Eunecod/mvtool-tui/releases/latest"
+                    .into(),
+            },
             about: AboutWidget::new(),
             console: ConsoleWidget::new(),
             projects: ProjectsWidget::new(),
@@ -116,6 +126,7 @@ impl Application {
             item_menu_plugins: Vec::new(),
             plugin_manager_widget: PluginManagerWidget::new(),
             messagebox: MessageBox::new(),
+            is_open_settings: false,
         }
     }
 
@@ -123,6 +134,8 @@ impl Application {
         self.ui.setup();
         self.ui
             .setup_fonts(include_bytes!("platforms/font/mvtool-bold.ttf"));
+
+        self.load_setting();
 
         self.try_update();
 
@@ -206,6 +219,39 @@ impl Application {
     fn load_icon(&mut self, raw_data: &[u8]) -> Option<Icon> {
         let icon = mvcore::service::load_icon(raw_data);
         Icon::from_rgba(icon.as_raw().to_vec(), icon.width(), icon.height()).ok()
+    }
+
+    fn load_setting(&mut self) {
+        if let Ok(content) = std::fs::read_to_string("config.ini") {
+            let target_header = format!("[{}]", "ApplicationSetting");
+
+            if let Some(start_idx) = content.find(&target_header) {
+                let section_text = &content[start_idx..];
+
+                for line in section_text.lines().skip(1) {
+                    if line.trim().starts_with('[') {
+                        break;
+                    }
+
+                    if let Some((key, value)) = line.split_once('=') {
+                        self.setting.read(key.trim(), value.trim());
+                    }
+                }
+            }
+        }
+    }
+
+    fn save_setting(&mut self) {
+        let mut ini = String::new();
+
+        self.ui.context().save_ini_settings(&mut ini);
+
+        ini.push_str(&format!("[{}]\n", "ApplicationSetting"));
+        self.setting.write(&mut ini);
+
+        if let Err(error) = std::fs::write("config.ini", ini) {
+            eprintln!("Failed to save config.ini: {}", error);
+        }
     }
 
     fn event_process(&mut self, event_loop: &ActiveEventLoop) {
@@ -354,6 +400,9 @@ impl Application {
                 Command::PluginManager() => {
                     self.plugin_manager_widget.open();
                 }
+                Command::Settings() => {
+                    self.is_open_settings = true;
+                }
                 Command::Exit() => {
                     event_loop.exit();
                 }
@@ -366,9 +415,10 @@ impl Application {
 
     fn try_update(&mut self) {
         let tx = self.tx.clone();
+        let url_repository = self.setting.url_repository.clone();
 
         self.rt.spawn(async move {
-            match Updater::new().await {
+            match Updater::new(&url_repository).await {
                 Ok(updater) => {
                     if updater.is_update_available() {
                         let session = UpdateSession::new(updater);
@@ -405,7 +455,9 @@ impl Application {
                             if ui.menu_item("Менеджер плагинов") {
                                 let _ = self.tx.blocking_send(Command::PluginManager());
                             }
-                            if ui.menu_item("Настройки") {}
+                            if ui.menu_item("Настройки") {
+                                let _ = self.tx.blocking_send(Command::Settings());
+                            }
 
                             ui.separator();
 
@@ -460,6 +512,14 @@ impl Application {
                     self.plugin_manager.loader.plugins.values_mut().collect();
 
                 self.plugin_manager_widget.draw(ui, &mut plugins);
+                let mut widget = SettingsWidget {
+                    data: SettingsData::new(&mut self.setting),
+                    is_open: self.is_open_settings,
+                };
+                widget.draw(ui, &mut ());
+                if !widget.is_open {
+                    self.is_open_settings = false;
+                }
 
                 self.messagebox.draw(ui, &mut ());
             });
@@ -517,6 +577,9 @@ impl ApplicationHandler for Application {
                 let _ = self
                     .tx
                     .blocking_send(Command::Devent("Закрытие приложения".into(), Type::Success));
+
+                self.save_setting();
+
                 event_loop.exit();
             }
             WindowEvent::KeyboardInput {
