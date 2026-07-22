@@ -114,6 +114,7 @@ impl Application {
             setting: ApplicationSetting {
                 url_repository: "https://api.github.com/repos/Eunecod/mvtool-tui/releases/latest"
                     .into(),
+                try_update: true,
             },
             about: AboutWidget::new(),
             console: ConsoleWidget::new(),
@@ -137,7 +138,9 @@ impl Application {
 
         self.load_setting();
 
-        self.try_update();
+        if self.setting.try_update {
+            let _ = self.tx.blocking_send(Command::TryUpdates());
+        }
 
         #[cfg(windows)]
         {
@@ -409,6 +412,9 @@ impl Application {
                 Command::About() => {
                     self.about.open();
                 }
+                Command::TryUpdates() => {
+                    self.try_update();
+                }
             }
         }
     }
@@ -423,6 +429,16 @@ impl Application {
                     if updater.is_update_available() {
                         let session = UpdateSession::new(updater);
                         let _ = tx.send(Command::UpdaterReady(session)).await;
+                    } else {
+                        let _ = tx
+                            .send(Command::Devent(
+                                format!(
+                                    "Обновлений не найдено текущая версия: {}",
+                                    mvcore::service::version()
+                                ),
+                                Type::Success,
+                            ))
+                            .await;
                     }
                 }
                 Err(error) => {
@@ -481,6 +497,12 @@ impl Application {
                         }
 
                         ui.menu("О программе", || {
+                            if ui.menu_item("Проверить обновления") {
+                                let _ = self.tx.blocking_send(Command::TryUpdates());
+                            }
+
+                            ui.separator();
+
                             if ui.menu_item("Что это?!") {
                                 let _ = self.tx.blocking_send(Command::About());
                             }

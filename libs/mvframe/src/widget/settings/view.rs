@@ -53,6 +53,12 @@ impl<'a> Widget<()> for SettingsWidget<'a> {
                             &mut self.data.application_setting.url_repository,
                         )
                         .build();
+
+                        ui.checkbox(
+                            "Проверять обновление при старте mvtool",
+                            &mut self.data.application_setting.try_update,
+                        );
+
                         ui.separator();
                     });
 
