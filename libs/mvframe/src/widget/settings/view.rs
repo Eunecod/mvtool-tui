@@ -55,7 +55,7 @@ impl<'a> Widget<()> for SettingsWidget<'a> {
                         .build();
 
                         ui.checkbox(
-                            "Проверять обновление при старте mvtool",
+                            "Проверять обновления при запуске mvtool",
                             &mut self.data.application_setting.try_update,
                         );
 
