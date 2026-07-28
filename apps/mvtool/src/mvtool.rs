@@ -445,7 +445,7 @@ impl Application {
                     let _ = tx
                         .send(Command::Devent(
                             format!(
-                                "Ошибка подключения к GitHub при проверке обновлений: {}",
+                                "Ошибка подключения к репозиторию при проверке обновлений: {}",
                                 error
                             ),
                             Type::Warning,
