@@ -44,7 +44,9 @@ impl List {
             if (ui.is_key_pressed(Key::UpArrow)) || (ui.is_key_pressed(Key::DownArrow)) {
                 selected_index = selected_index.checked_sub(1).unwrap_or(items.len() - 1);
             }
+        }
 
+        if ui.is_item_hovered() {
             let wheel = ui.io().mouse_wheel;
             if wheel > 0.0 {
                 selected_index = selected_index.checked_sub(1).unwrap_or(items.len() - 1);
