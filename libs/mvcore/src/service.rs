@@ -1,5 +1,6 @@
 // libs/core/src/service.rs
 
+use std::fs::File as StdFile;
 use std::path::Path;
 
 use image::RgbaImage;
@@ -91,10 +92,19 @@ pub fn open_url(url: &str) {
 }
 
 pub fn is_match(path: &Path, target_name: &str, extension_mask: &[String]) -> bool {
-    let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-    let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    let file_name = match path.file_name().and_then(|s| s.to_str()) {
+        Some(name) => name,
+        None => return false,
+    };
 
-    if target_name != file_stem {
+    let matches_name = if file_name.starts_with(target_name) {
+        let remainder = &file_name[target_name.len()..];
+        remainder.is_empty() || remainder.starts_with('.')
+    } else {
+        false
+    };
+
+    if !matches_name {
         return false;
     }
 
@@ -102,9 +112,10 @@ pub fn is_match(path: &Path, target_name: &str, extension_mask: &[String]) -> bo
         return true;
     }
 
-    extension_mask
-        .iter()
-        .any(|mask| mask.trim_start_matches("*.") == extension)
+    extension_mask.iter().any(|mask| {
+        let ext = mask.trim_start_matches('*');
+        file_name.ends_with(ext)
+    })
 }
 
 pub fn is_newer_version(target_version: &str) -> bool {
@@ -116,4 +127,15 @@ pub fn is_newer_version(target_version: &str) -> bool {
     }
 
     false
+}
+
+pub fn unpackage_tar(archive_path: &Path, extract_path: &Path) -> Result<(), String> {
+    let file = StdFile::open(&archive_path)
+        .map_err(|error| format!("Не удалось открыть архив: {}", error))?;
+    let mut archive = tar::Archive::new(file);
+    archive
+        .unpack(&extract_path)
+        .map_err(|error| format!("Ошибка распаковки: {}", error))?;
+
+    Ok(())
 }

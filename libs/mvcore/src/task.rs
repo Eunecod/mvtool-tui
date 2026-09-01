@@ -92,7 +92,7 @@ pub async fn copying(projects: Vec<Project>, tx: mpsc::Sender<Command>) {
 
                 let matches_mask = configure.extension_mask.is_empty()
                     || configure.extension_mask.iter().any(|mask| {
-                        let mask = mask.trim_start_matches("*.");
+                        let mask = mask.trim_start_matches("*");
                         file_name_str.ends_with(mask)
                     });
 

@@ -17,7 +17,6 @@ use tokio::sync::mpsc;
 use mvcore::events::Command;
 use mvcore::events::Type;
 
-use std::fs::File as StdFile;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -127,13 +126,7 @@ impl Updater {
         let extract_path_clone = extract_path.clone();
 
         tokio::task::spawn_blocking(move || -> Result<(), String> {
-            let file = StdFile::open(&archive_path_clone)
-                .map_err(|error| format!("Не удалось открыть архив: {}", error))?;
-            let mut archive = tar::Archive::new(file);
-            archive
-                .unpack(&extract_path_clone)
-                .map_err(|error| format!("Ошибка распаковки: {}", error))?;
-            Ok(())
+            mvcore::service::unpackage_tar(&archive_path_clone, &extract_path_clone)
         })
         .await
         .map_err(|error| format!("Ошибка задачи распаковки: {}", error))??;
