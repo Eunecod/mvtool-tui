@@ -25,6 +25,7 @@ qrcode = "0.14.1"
 open = "5.3.5"
 semver = "1.0"
 arboard = "3.4"
+tar = "0.4"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56.0"
