@@ -1,6 +1,8 @@
 // mvtool/src/mvtool.rs
 
+use mvframe::widget::PluginManagerWidget;
 use mvframe::widget::SettingsWidget;
+use mvframe::widget::plugin_manager::PluginManagerData;
 use mvframe::widget::settings::SettingsData;
 use tokio::process::Command as AsyncCommand;
 use tokio::runtime::Builder;
@@ -40,7 +42,6 @@ use mvframe::widget::ComponentsWidget;
 use mvframe::widget::ConfiguresWidget;
 use mvframe::widget::ConsoleWidget;
 use mvframe::widget::MessageBox;
-use mvframe::widget::PluginManagerWidget;
 use mvframe::widget::PluginWidget;
 use mvframe::widget::ProjectsWidget;
 use mvframe::widget::ScriptsWidget;
@@ -50,7 +51,6 @@ use mvframe::widget::Widget;
 use mvframe::widget::plugins::ItemMenuData;
 use mvframe::widget::plugins::ItemMenuPlugins;
 
-use mvplugin::api::Plugin;
 use mvplugin::system::PluginManager;
 
 use updater::Updater;
@@ -80,10 +80,9 @@ pub struct Application {
     updates: UpdatesWidget,
     plugins: Vec<PluginWidget>,
     item_menu_plugins: Vec<ItemMenuData>,
-    plugin_manager_widget: PluginManagerWidget,
-
     messagebox: MessageBox,
     is_open_settings: bool,
+    is_open_plugin_manager: bool,
 }
 
 impl Application {
@@ -125,9 +124,9 @@ impl Application {
             updates: UpdatesWidget::new(tx_updates),
             plugins: Vec::new(),
             item_menu_plugins: Vec::new(),
-            plugin_manager_widget: PluginManagerWidget::new(),
             messagebox: MessageBox::new(),
             is_open_settings: false,
+            is_open_plugin_manager: false,
         }
     }
 
@@ -401,7 +400,7 @@ impl Application {
                     }
                 }
                 Command::PluginManager() => {
-                    self.plugin_manager_widget.open();
+                    self.is_open_plugin_manager = true;
                 }
                 Command::Settings() => {
                     self.is_open_settings = true;
@@ -530,10 +529,17 @@ impl Application {
                 self.updates.draw(ui, &mut ());
                 self.about.draw(ui, &mut ());
 
-                let mut plugins: Vec<&mut Plugin> =
-                    self.plugin_manager.loader.plugins.values_mut().collect();
+                let mut widget = PluginManagerWidget {
+                    data: PluginManagerData::new(
+                        self.plugin_manager.loader.plugins.values_mut().collect(),
+                    ),
+                    is_open: self.is_open_plugin_manager,
+                };
+                widget.draw(ui, &mut ());
+                if !widget.is_open {
+                    self.is_open_plugin_manager = false;
+                }
 
-                self.plugin_manager_widget.draw(ui, &mut plugins);
                 let mut widget = SettingsWidget {
                     data: SettingsData::new(&mut self.setting),
                     is_open: self.is_open_settings,
