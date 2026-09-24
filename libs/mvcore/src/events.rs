@@ -6,6 +6,7 @@ pub enum Type {
     Success,
     Warning,
     Error,
+    Stdout,
 }
 
 pub enum Command {

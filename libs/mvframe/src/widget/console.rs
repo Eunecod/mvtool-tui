@@ -71,6 +71,7 @@ impl Widget<()> for ConsoleWidget {
                                 Type::Success => ([0.0, 1.0, 0.0, 1.0], "[success]:"),
                                 Type::Warning => ([1.0, 0.8, 0.0, 1.0], "[warning]:"),
                                 Type::Error => ([1.0, 0.2, 0.2, 1.0], "[ error ]:"),
+                                Type::Stdout => ([1.0, 1.0, 1.0, 1.0], "          "),
                             };
 
                             ui.text_colored(color, prefix);

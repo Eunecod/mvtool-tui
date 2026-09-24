@@ -1,7 +1,11 @@
 // mvtool/src/mvtool.rs
 
+use mvframe::widget::PluginManagerWidget;
 use mvframe::widget::SettingsWidget;
+use mvframe::widget::plugin_manager::PluginManagerData;
 use mvframe::widget::settings::SettingsData;
+use tokio::io::AsyncBufReadExt;
+use tokio::io::BufReader;
 use tokio::process::Command as AsyncCommand;
 use tokio::runtime::Builder;
 use tokio::runtime::Runtime;
@@ -40,7 +44,6 @@ use mvframe::widget::ComponentsWidget;
 use mvframe::widget::ConfiguresWidget;
 use mvframe::widget::ConsoleWidget;
 use mvframe::widget::MessageBox;
-use mvframe::widget::PluginManagerWidget;
 use mvframe::widget::PluginWidget;
 use mvframe::widget::ProjectsWidget;
 use mvframe::widget::ScriptsWidget;
@@ -50,7 +53,6 @@ use mvframe::widget::Widget;
 use mvframe::widget::plugins::ItemMenuData;
 use mvframe::widget::plugins::ItemMenuPlugins;
 
-use mvplugin::api::Plugin;
 use mvplugin::system::PluginManager;
 
 use updater::Updater;
@@ -80,10 +82,9 @@ pub struct Application {
     updates: UpdatesWidget,
     plugins: Vec<PluginWidget>,
     item_menu_plugins: Vec<ItemMenuData>,
-    plugin_manager_widget: PluginManagerWidget,
-
     messagebox: MessageBox,
     is_open_settings: bool,
+    is_open_plugin_manager: bool,
 }
 
 impl Application {
@@ -125,9 +126,9 @@ impl Application {
             updates: UpdatesWidget::new(tx_updates),
             plugins: Vec::new(),
             item_menu_plugins: Vec::new(),
-            plugin_manager_widget: PluginManagerWidget::new(),
             messagebox: MessageBox::new(),
             is_open_settings: false,
+            is_open_plugin_manager: false,
         }
     }
 
@@ -283,6 +284,9 @@ impl Application {
                                 AsyncCommand::new("cmd")
                                     .args(&["/C", &command])
                                     .current_dir(".")
+                                    .creation_flags(0x08000000)
+                                    .stdout(std::process::Stdio::piped())
+                                    .stderr(std::process::Stdio::piped())
                                     .spawn()
                             }
                             #[cfg(target_os = "linux")]
@@ -290,29 +294,63 @@ impl Application {
                                 AsyncCommand::new("sh")
                                     .args(&["-c", &command])
                                     .current_dir(".")
+                                    .stdout(std::process::Stdio::piped())
+                                    .stderr(std::process::Stdio::piped())
                                     .spawn()
                             }
                         };
 
                         match process_execute {
-                            Ok(mut process) => match process.wait().await {
-                                Ok(status) if status.success() => {
-                                    let _ = tx
-                                        .send(Command::Devent(
-                                            format!("Задача '{}' выполнена", name),
-                                            Type::Success,
-                                        ))
-                                        .await;
+                            Ok(mut process) => {
+                                let stdout = process.stdout.take();
+                                let stderr = process.stderr.take();
+
+                                let tx_stdout = tx.clone();
+                                let stdout_task = tokio::spawn(async move {
+                                    if let Some(stdout) = stdout {
+                                        let mut reader = BufReader::new(stdout).lines();
+                                        while let Ok(Some(line)) = reader.next_line().await {
+                                            let _ = tx_stdout
+                                                .send(Command::Devent(line, Type::Stdout))
+                                                .await;
+                                        }
+                                    }
+                                });
+
+                                let tx_stderr = tx.clone();
+                                let stderr_task = tokio::spawn(async move {
+                                    if let Some(stderr) = stderr {
+                                        let mut reader = BufReader::new(stderr).lines();
+                                        while let Ok(Some(line)) = reader.next_line().await {
+                                            let _ = tx_stderr
+                                                .send(Command::Devent(line, Type::Warning))
+                                                .await;
+                                        }
+                                    }
+                                });
+
+                                let status = process.wait().await;
+                                let _ = tokio::join!(stdout_task, stderr_task);
+
+                                match status {
+                                    Ok(status) if status.success() => {
+                                        let _ = tx
+                                            .send(Command::Devent(
+                                                format!("Задача '{}' успешно выполнена", name),
+                                                Type::Success,
+                                            ))
+                                            .await;
+                                    }
+                                    _ => {
+                                        let _ = tx
+                                            .send(Command::Devent(
+                                                format!("Задача '{}' завершилась с ошибкой", name),
+                                                Type::Error,
+                                            ))
+                                            .await;
+                                    }
                                 }
-                                _ => {
-                                    let _ = tx
-                                        .send(Command::Devent(
-                                            format!("Задача '{}' завершилась с ошибкой", name),
-                                            Type::Error,
-                                        ))
-                                        .await;
-                                }
-                            },
+                            }
                             Err(error) => {
                                 let _ = tx
                                     .send(Command::Devent(
@@ -401,7 +439,7 @@ impl Application {
                     }
                 }
                 Command::PluginManager() => {
-                    self.plugin_manager_widget.open();
+                    self.is_open_plugin_manager = true;
                 }
                 Command::Settings() => {
                     self.is_open_settings = true;
@@ -530,10 +568,17 @@ impl Application {
                 self.updates.draw(ui, &mut ());
                 self.about.draw(ui, &mut ());
 
-                let mut plugins: Vec<&mut Plugin> =
-                    self.plugin_manager.loader.plugins.values_mut().collect();
+                let mut widget = PluginManagerWidget {
+                    data: PluginManagerData::new(
+                        self.plugin_manager.loader.plugins.values_mut().collect(),
+                    ),
+                    is_open: self.is_open_plugin_manager,
+                };
+                widget.draw(ui, &mut ());
+                if !widget.is_open {
+                    self.is_open_plugin_manager = false;
+                }
 
-                self.plugin_manager_widget.draw(ui, &mut plugins);
                 let mut widget = SettingsWidget {
                     data: SettingsData::new(&mut self.setting),
                     is_open: self.is_open_settings,
