@@ -213,6 +213,20 @@ impl PluginLoader {
 
         let tx = self.api.tx.clone();
 
+        /* impl show_notification */
+        let show_notification = lua
+            .create_function(move |_, (title, message): (String, String)| {
+                let _ = tx.blocking_send(Command::ShowNotification(title, message));
+
+                Ok(())
+            })
+            .map_err(|error| format!("Ошибка загрузки [api: show_notification]: {}", error))?;
+
+        api.set("show_notification", show_notification)
+            .map_err(|error| error.to_string())?;
+
+        let tx = self.api.tx.clone();
+
         /* impl message box */
         let messagebox = lua
             .create_function(
