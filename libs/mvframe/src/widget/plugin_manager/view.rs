@@ -2,11 +2,16 @@
 
 use crate::widget::PluginManagerWidget;
 use crate::widget::Widget;
+use crate::widget::controls::Shortcut;
 
 use imgui::Condition;
 use imgui::StyleColor;
 use imgui::Ui;
 use imgui::WindowFlags;
+
+use mvcore::events::Command;
+use mvplugin::core::plugin::PluginState;
+use mvplugin::loader::Loader;
 
 impl<'a> Widget<()> for PluginManagerWidget<'a> {
     fn draw(&mut self, ui: &Ui, _: &mut ()) {
@@ -45,20 +50,50 @@ impl<'a> Widget<()> for PluginManagerWidget<'a> {
                     .size([0.0, scroll_zone_height])
                     .scroll_bar(true)
                     .build(|| {
-                        for plugin in &mut self.data.plugins {
+                        for (file_name, plugin) in self.data.plugins.iter_mut() {
                             ui.separator();
 
-                            ui.text(format!("Название:         {}", &plugin.meta.name));
-                            ui.text(format!("Версия плагина:   {}", &plugin.meta.version));
-                            ui.text(format!("Автор плагина:    {}", &plugin.meta.author));
-                            ui.text(format!("Описание плагина: {}", &plugin.meta.description));
-                            ui.text("");
-                            ui.text(format!("Зависимость:      {}", &plugin.meta.requirement));
+                            let metadata = &plugin.metadata;
+                            ui.text(format!("Название:         {}", &metadata.name));
+                            ui.text(format!("Версия плагина:   {}", &metadata.version));
+                            ui.text(format!("Автор плагина:    {}", &metadata.author));
+                            ui.text(format!("Описание плагина: {}", &metadata.description));
+                            ui.spacing();
+                            ui.text(format!("Зависимость:      {}", &metadata.requirement));
+                            ui.spacing();
 
+                            if plugin.has_hook("on_start") {
+                                let mut shortcut = Shortcut::new(plugin.shortcut.clone());
+                                if shortcut.draw(ui, file_name) {
+                                    plugin.shortcut = shortcut.key.clone();
+                                }
+                            }
+
+                            let mut enabled = matches!(plugin.state, PluginState::Active(_));
                             ui.checkbox(
-                                &format!("Активировать##item_{}", plugin.meta.name),
-                                &mut plugin.enabled,
+                                &format!("Активировать##item_{}", plugin.metadata.name),
+                                &mut enabled,
                             );
+
+                            if !enabled {
+                                plugin.state = PluginState::Disabled;
+                            } else if matches!(plugin.state, PluginState::Disabled) {
+                                match Loader::new(self.data.tx.clone())
+                                    .load_instance(format!("./plugins/{}.lua", file_name))
+                                {
+                                    Ok(instance) => {
+                                        plugin.state = PluginState::Active(Box::new(instance));
+                                    }
+                                    Err(error) => {
+                                        let _ =
+                                            self.data.tx.blocking_send(Command::ShowMessageBox(
+                                                "Ошибка".into(),
+                                                format!("Не удалось включить плагин:\n{}", error),
+                                                Box::new(|| {}),
+                                            ));
+                                    }
+                                }
+                            }
 
                             ui.separator();
                         }
