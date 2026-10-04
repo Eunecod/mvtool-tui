@@ -15,4 +15,5 @@ pub mod widget;
 pub use widget::ComponentsWidget;
 pub use widget::ConfiguresWidget;
 pub use widget::ConsoleWidget;
+pub use widget::PluginWidget;
 pub use widget::ProjectsWidget;

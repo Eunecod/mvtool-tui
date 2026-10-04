@@ -4,6 +4,9 @@ use mvframe::widget::PluginManagerWidget;
 use mvframe::widget::SettingsWidget;
 use mvframe::widget::plugin_manager::PluginManagerData;
 use mvframe::widget::settings::SettingsData;
+use mvplugin::core::models::Root as LuaRoot;
+use mvplugin::core::plugin::PluginState;
+use mvplugin::core::setting::PluginSettings;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
 use tokio::process::Command as AsyncCommand;
@@ -49,13 +52,14 @@ use mvframe::widget::ProjectsWidget;
 use mvframe::widget::ScriptsWidget;
 use mvframe::widget::UpdatesWidget;
 use mvframe::widget::Widget;
+use mvframe::widget::plugin::PluginData;
 
-use mvframe::widget::plugins::ItemMenuData;
-use mvframe::widget::plugins::ItemMenuPlugins;
-
-use mvplugin::system::PluginManager;
+use mvplugin::loader::Loader;
 
 use updater::Updater;
+
+use mvplugin::core::plugin::Plugin;
+use std::collections::HashMap;
 
 use crate::domain::SharedData;
 
@@ -64,14 +68,14 @@ pub struct Application {
     rx: mpsc::Receiver<Command>,
     tx: mpsc::Sender<Command>,
 
-    plugin_manager: PluginManager,
-
     ui: UiState,
     gfx: Option<RenderContext>,
     window: Option<Window>,
     update_session: Option<UpdateSession>,
     data: SharedData,
     setting: ApplicationSetting,
+
+    plugins: HashMap<String, Plugin>,
 
     about: AboutWidget,
     console: ConsoleWidget,
@@ -80,8 +84,6 @@ pub struct Application {
     components: ComponentsWidget,
     scripts: ScriptsWidget,
     updates: UpdatesWidget,
-    plugins: Vec<PluginWidget>,
-    item_menu_plugins: Vec<ItemMenuData>,
     messagebox: MessageBox,
     is_open_settings: bool,
     is_open_plugin_manager: bool,
@@ -96,7 +98,6 @@ impl Application {
             .build()
             .expect("Failed to create runtime");
 
-        let tx_plugins = tx.clone();
         let tx_scripts = tx.clone();
         let tx_updates = tx.clone();
 
@@ -104,7 +105,6 @@ impl Application {
             rt,
             rx,
             tx,
-            plugin_manager: PluginManager::new(tx_plugins),
             ui: UiState::new(),
             gfx: None,
             window: None,
@@ -117,6 +117,8 @@ impl Application {
                     .into(),
                 try_update: true,
             },
+            plugins: HashMap::new(),
+
             about: AboutWidget::new(),
             console: ConsoleWidget::new(),
             projects: ProjectsWidget::new(),
@@ -124,8 +126,6 @@ impl Application {
             components: ComponentsWidget::new(),
             scripts: ScriptsWidget::new(tx_scripts),
             updates: UpdatesWidget::new(tx_updates),
-            plugins: Vec::new(),
-            item_menu_plugins: Vec::new(),
             messagebox: MessageBox::new(),
             is_open_settings: false,
             is_open_plugin_manager: false,
@@ -169,25 +169,27 @@ impl Application {
             }
         }
 
-        if let Err(error) = self.plugin_manager.loader.load_plugins("./plugins") {
-            let _ = self.tx.blocking_send(Command::Devent(error, Type::Error));
-        } else if !self.plugin_manager.loader.plugins.is_empty() {
-            let _ = self.tx.blocking_send(Command::Devent(
-                format!(
-                    "Плагины успешно загруженны [загруженно {}]",
-                    self.plugin_manager.loader.plugins.len()
-                ),
-                Type::Success,
-            ));
+        let mut loader = Loader::new(self.tx.clone());
+        match loader.load("./plugins") {
+            Ok(plugins) => {
+                for (name, plugin) in plugins {
+                    self.plugins.insert(name, plugin);
+                }
 
-            for (name, plugin) in &self.plugin_manager.loader.plugins {
-                let table = plugin.hook();
-                if let Ok(_) = table.get::<mlua::Function>("build") {
-                    self.plugins.push(PluginWidget::new(&name));
+                self.restore_plugin();
+
+                if !self.plugins.is_empty() {
+                    let _ = self.tx.blocking_send(Command::Devent(
+                        format!(
+                            "Плагины успешно загруженны [загруженно {}]",
+                            self.plugins.len()
+                        ),
+                        Type::Success,
+                    ));
                 }
-                if let Ok(_) = table.get::<mlua::Function>("menu") {
-                    self.item_menu_plugins.push(ItemMenuData::new(&name));
-                }
+            }
+            Err(error) => {
+                let _ = self.tx.blocking_send(Command::Devent(error, Type::Error));
             }
         }
 
@@ -197,6 +199,7 @@ impl Application {
             "Программа 'mvtool' готова к работе".into(),
             Type::Success,
         ));
+
         self
     }
 
@@ -223,6 +226,29 @@ impl Application {
     fn load_icon(&mut self, raw_data: &[u8]) -> Option<Icon> {
         let icon = mvcore::service::load_icon(raw_data);
         Icon::from_rgba(icon.as_raw().to_vec(), icon.width(), icon.height()).ok()
+    }
+
+    fn restore_plugin(&mut self) {
+        if let Ok(content) = std::fs::read_to_string("config.ini") {
+            let target_header = "[Plugins]";
+
+            if let Some(start_idx) = content.find(target_header) {
+                let section_text = &content[start_idx..];
+                let mut plugin_settings = PluginSettings(&mut self.plugins);
+
+                for line in section_text.lines().skip(1) {
+                    let line = line.trim();
+
+                    if line.starts_with('[') {
+                        break;
+                    }
+
+                    if let Some((key, value)) = line.split_once('=') {
+                        plugin_settings.read(key.trim(), value.trim());
+                    }
+                }
+            }
+        }
     }
 
     fn load_setting(&mut self) {
@@ -252,6 +278,11 @@ impl Application {
 
         ini.push_str(&format!("[{}]\n", "ApplicationSetting"));
         self.setting.write(&mut ini);
+
+        ini.push_str("\n");
+
+        ini.push_str(&format!("[{}]\n", "Plugins"));
+        PluginSettings(&mut self.plugins).write(&mut ini);
 
         if let Err(error) = std::fs::write("config.ini", ini) {
             eprintln!("Failed to save config.ini: {}", error);
@@ -520,17 +551,19 @@ impl Application {
                             }
                         });
 
-                        if !self.item_menu_plugins.is_empty() {
+                        for plugin in self.plugins.values_mut().filter(|plugin| {
+                            matches!(plugin.state, PluginState::Active(_))
+                                && plugin.has_hook("menu")
+                        }) {
                             ui.menu("Плагины", || {
-                                for item_menu in &mut self.item_menu_plugins {
-                                    if let Some(_) = ui.begin_menu(&item_menu.title) {
-                                        let mut widget = ItemMenuPlugins {
-                                            data: item_menu,
-                                            plugin_manager: &mut self.plugin_manager,
-                                        };
-                                        widget.draw(ui, &mut data.projects);
-                                    }
+                                mvplugin::api::imgui::CURRENT_UI.with(|cell| cell.set(Some(ui)));
+                                if let Err(error) = plugin.emit("menu", LuaRoot(data.clone())) {
+                                    let _ = self.tx.blocking_send(Command::Devent(
+                                        format!("{}", error),
+                                        Type::Warning,
+                                    ));
                                 }
+                                mvplugin::api::imgui::CURRENT_UI.with(|cell| cell.set(None));
                             });
                         }
 
@@ -547,8 +580,13 @@ impl Application {
                         });
                     });
 
-                    for plugin in &mut self.plugins {
-                        plugin.draw(ui, &self.plugin_manager, &mut data.projects);
+                    for plugin in self.plugins.values_mut().filter(|plugin| {
+                        matches!(plugin.state, PluginState::Active(_)) && plugin.has_hook("build")
+                    }) {
+                        let mut widget = PluginWidget {
+                            data: PluginData { plugin },
+                        };
+                        widget.draw(ui, &mut data);
                     }
 
                     if let Some(project) = data.projects.iter_mut().find(|project| project.selected)
@@ -568,15 +606,15 @@ impl Application {
                 self.updates.draw(ui, &mut ());
                 self.about.draw(ui, &mut ());
 
-                let mut widget = PluginManagerWidget {
-                    data: PluginManagerData::new(
-                        self.plugin_manager.loader.plugins.values_mut().collect(),
-                    ),
-                    is_open: self.is_open_plugin_manager,
-                };
-                widget.draw(ui, &mut ());
-                if !widget.is_open {
-                    self.is_open_plugin_manager = false;
+                if self.is_open_plugin_manager {
+                    let mut widget = PluginManagerWidget {
+                        data: PluginManagerData::new(&mut self.plugins, self.tx.clone()),
+                        is_open: self.is_open_plugin_manager,
+                    };
+                    widget.draw(ui, &mut ());
+                    if !widget.is_open {
+                        self.is_open_plugin_manager = false;
+                    }
                 }
 
                 let mut widget = SettingsWidget {
@@ -661,43 +699,34 @@ impl ApplicationHandler for Application {
             } => {
                 let _ = self.tx.blocking_send(Command::Copyng());
             }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        logical_key: Key::Named(NamedKey::F2),
-                        state: ElementState::Pressed,
-                        repeat: false,
-                        ..
-                    },
-                ..
-            } => {
-                let data = self.data.read().projects.clone();
-
-                if let Err(error) = self.plugin_manager.emit("on_start", &data, None) {
-                    let _ = self.tx.blocking_send(Command::Devent(error, Type::Error));
-                }
-            }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        logical_key: Key::Named(NamedKey::Escape),
-                        state: ElementState::Pressed,
-                        repeat: false,
-                        ..
-                    },
-                ..
-            } => {
-                let _ = self.tx.blocking_send(Command::Exit());
-            }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let winit::keyboard::PhysicalKey::Code(key_code) = event.physical_key {
-                    let imgui_key = self.ui.key(key_code);
-
-                    if let Some(key) = imgui_key {
+                    if let Some(key) = self.ui.key(key_code) {
                         self.ui
                             .context()
                             .io_mut()
                             .add_key_event(key, event.state.is_pressed());
+
+                        if event.state == winit::event::ElementState::Pressed && !event.repeat {
+                            if self.ui.context().io().want_capture_keyboard {
+                                return;
+                            }
+
+                            let data = self.data.read();
+
+                            for (name, plugin) in self.plugins.iter_mut() {
+                                if plugin.shortcut == Some(key as u32) {
+                                    if let Err(error) =
+                                        plugin.emit("on_start", LuaRoot(data.clone()))
+                                    {
+                                        let _ = self.tx.blocking_send(Command::Devent(
+                                            format!("[{}] {}", name, error),
+                                            Type::Error,
+                                        ));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

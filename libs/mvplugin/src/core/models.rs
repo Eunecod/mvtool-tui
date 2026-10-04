@@ -1,9 +1,22 @@
-// libs/mvplugin/src/bridge/models.rs
+// libs/mvplugin/src/core/models.rs
 
-use mlua::IntoLua;
-use mlua::Lua;
-use mlua::Result;
-use mlua::Value;
+use mlua::{IntoLua, Lua, Result, Value};
+
+#[derive(Clone)]
+pub struct Root(pub mvcore::io::Root);
+
+impl IntoLua for Root {
+    fn into_lua(self, lua: &Lua) -> Result<Value> {
+        let table = lua.create_table()?;
+
+        table.set(
+            "projects",
+            self.0.projects.into_iter().map(Project).collect::<Vec<_>>(),
+        )?;
+
+        Ok(Value::Table(table))
+    }
+}
 
 #[derive(Clone)]
 pub struct Project(pub mvcore::io::Project);
