@@ -143,6 +143,7 @@ impl Loader {
         api::messagebox(register_context)?;
         api::notify(register_context)?;
         api::imgui(register_context)?;
+        api::copying(register_context)?;
 
         Ok(())
     }
