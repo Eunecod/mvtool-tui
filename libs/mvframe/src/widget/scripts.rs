@@ -10,6 +10,7 @@ use imgui::Condition;
 use imgui::Ui;
 
 use mvcore::events::Command;
+use mvcore::events::Type;
 use mvcore::io::Script;
 
 impl Executor for Script {
@@ -48,9 +49,25 @@ impl Widget<Vec<Script>> for ScriptsWidget {
                 ui.separator();
 
                 self.action.draw(ui, scripts, |item| {
+                    let tx = self.tx.clone();
+                    let task_name = item.name().to_string();
+
                     let _ = self.tx.blocking_send(Command::Execute(
                         item.name().to_string(),
                         item.command().to_string(),
+                        Some(Box::new(move |success| {
+                            if success {
+                                let _ = tx.blocking_send(Command::Devent(
+                                    format!("Задача '{}' успешно выполнена", task_name),
+                                    Type::Success,
+                                ));
+                            } else {
+                                let _ = tx.blocking_send(Command::Devent(
+                                    format!("Задача '{}' завершилась с ошибкой", task_name),
+                                    Type::Error,
+                                ));
+                            }
+                        })),
                     ));
                 });
             });
