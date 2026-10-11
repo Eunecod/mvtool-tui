@@ -8,7 +8,7 @@ pub fn notify(ctx: &mut RegisterContext) -> Result<(), String> {
     let notify = ctx
         .lua
         .create_function(move |_, (title, message): (String, String)| {
-            let _ = tx.blocking_send(Command::ShowNotification(title, message));
+            let _ = tx.blocking_send(Command::Notify(title, message));
 
             Ok(())
         })
