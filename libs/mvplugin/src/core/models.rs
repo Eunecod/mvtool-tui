@@ -1,6 +1,6 @@
 // libs/mvplugin/src/core/models.rs
 
-use mlua::{IntoLua, Lua, Result, Value};
+use mlua::{FromLua, IntoLua, Lua, Result, Value};
 
 #[derive(Clone)]
 pub struct Root(pub mvcore::io::Root);
@@ -15,6 +15,24 @@ impl IntoLua for Root {
         )?;
 
         Ok(Value::Table(table))
+    }
+}
+
+impl FromLua for Root {
+    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+        if let Value::Table(table) = value {
+            let projects: Vec<Project> = table.get("projects")?;
+
+            Ok(Root(mvcore::io::Root {
+                projects: projects.into_iter().map(|project| project.0).collect(),
+            }))
+        } else {
+            Err(mlua::Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Root".to_string(),
+                message: Some("expected a table".into()),
+            })
+        }
     }
 }
 
@@ -39,6 +57,30 @@ impl IntoLua for Project {
         )?;
 
         Ok(Value::Table(table))
+    }
+}
+
+impl FromLua for Project {
+    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+        if let Value::Table(table) = value {
+            let configures: Vec<Configure> = table.get("configures")?;
+
+            Ok(Project(mvcore::io::Project {
+                name: table.get("name")?,
+                selected: table.get("selected")?,
+                destination_path: table.get("destination_path")?,
+                configures: configures
+                    .into_iter()
+                    .map(|configure| configure.0)
+                    .collect(),
+            }))
+        } else {
+            Err(mlua::Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Project".to_string(),
+                message: Some("expected a table".into()),
+            })
+        }
     }
 }
 
@@ -73,6 +115,34 @@ impl IntoLua for Configure {
     }
 }
 
+impl FromLua for Configure {
+    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+        if let Value::Table(table) = value {
+            let components: Vec<Component> = table.get("components")?;
+            let scripts: Vec<Script> = table.get("scripts")?;
+
+            Ok(Configure(mvcore::io::Configure {
+                name: table.get("name")?,
+                source_path: table.get("source_path")?,
+                selected: table.get("selected")?,
+                clean_destination: table.get("clean_destination")?,
+                extension_mask: table.get("extension_mask")?,
+                components: components
+                    .into_iter()
+                    .map(|component| component.0)
+                    .collect(),
+                scripts: scripts.into_iter().map(|script| script.0).collect(),
+            }))
+        } else {
+            Err(mlua::Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Configure".to_string(),
+                message: Some("expected a table".into()),
+            })
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Component(pub mvcore::io::Component);
 
@@ -87,6 +157,23 @@ impl IntoLua for Component {
     }
 }
 
+impl FromLua for Component {
+    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+        if let Value::Table(table) = value {
+            Ok(Component(mvcore::io::Component {
+                name: table.get("name")?,
+                selected: table.get("selected")?,
+            }))
+        } else {
+            Err(mlua::Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Component".to_string(),
+                message: Some("expected a table".into()),
+            })
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Script(pub mvcore::io::Script);
 
@@ -98,5 +185,22 @@ impl IntoLua for Script {
         table.set("command", self.0.command)?;
 
         Ok(Value::Table(table))
+    }
+}
+
+impl FromLua for Script {
+    fn from_lua(value: Value, _lua: &Lua) -> Result<Self> {
+        if let Value::Table(table) = value {
+            Ok(Script(mvcore::io::Script {
+                name: table.get("name")?,
+                command: table.get("command")?,
+            }))
+        } else {
+            Err(mlua::Error::FromLuaConversionError {
+                from: value.type_name(),
+                to: "Script".to_string(),
+                message: Some("expected a table".into()),
+            })
+        }
     }
 }
