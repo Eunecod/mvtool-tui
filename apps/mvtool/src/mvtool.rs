@@ -364,9 +364,22 @@ impl Application {
                                 let _ = tokio::join!(stdout_task, stderr_task);
 
                                 if let Some(callback) = callback {
-                                    let _ = tx
-                                        .send(Command::LuaCallback(callback, status.is_ok()))
-                                        .await;
+                                    let success = match &status {
+                                        Ok(state) => state.success(),
+                                        Err(error) => {
+                                            let _ = tx
+                                                .send(Command::Devent(
+                                                    format!(
+                                                        "Ошибка при выполнении задачи '{}': {}",
+                                                        name, error
+                                                    ),
+                                                    Type::Error,
+                                                ))
+                                                .await;
+                                            false
+                                        }
+                                    };
+                                    let _ = tx.send(Command::LuaCallback(callback, success)).await;
                                 }
                             }
                             Err(error) => {
