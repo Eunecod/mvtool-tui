@@ -1,5 +1,8 @@
 // libs/core/src/events.rs
 
+use crate::io::schema::Project;
+use crate::session::UpdateSession;
+
 #[derive(PartialEq)]
 pub enum Type {
     Message,
@@ -11,15 +14,20 @@ pub enum Type {
 
 pub enum Command {
     Devent(String, Type),
-    ShowNotification(String, String),
+    Notify(String, String),
     ShowMessageBox(String, String, Box<dyn FnOnce() + Send + 'static>),
-    Execute(String, String),
-    UpdaterReady(crate::session::UpdateSession),
+    Execute(
+        String,
+        String,
+        Option<Box<dyn FnOnce(bool) + Send + 'static>>,
+    ),
+    UpdaterReady(UpdateSession),
     Update(),
-    Copyng(),
+    Copyng(Project),
     PluginManager(),
     Settings(),
     About(),
     TryUpdates(),
     Exit(),
+    LuaCallback(Box<dyn FnOnce(bool) + Send + 'static>, bool),
 }

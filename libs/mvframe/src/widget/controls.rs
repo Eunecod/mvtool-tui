@@ -14,3 +14,6 @@ pub use action::Executor;
 
 pub mod link;
 pub use link::Link;
+
+pub mod shortcut;
+pub use shortcut::Shortcut;

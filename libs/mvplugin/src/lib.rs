@@ -8,12 +8,5 @@
 //                           |
 
 pub mod api;
-pub mod system;
-
-use tokio::sync::mpsc;
-
-use mvcore::events::Command;
-
-pub struct Api {
-    pub tx: mpsc::Sender<Command>,
-}
+pub mod core;
+pub mod loader;
