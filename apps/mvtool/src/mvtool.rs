@@ -296,7 +296,7 @@ impl Application {
                     self.console.add(message.as_str(), message_type);
                     println!("{}", message);
                 }
-                Command::ShowNotification(title, message) => {
+                Command::Notify(title, message) => {
                     mvcore::service::show_notification("mvtool", &title, &message);
                 }
                 Command::ShowMessageBox(title, message, action) => {
@@ -305,7 +305,7 @@ impl Application {
                         .message(message)
                         .spawn(action);
                 }
-                Command::Execute(name, command) => {
+                Command::Execute(name, command, callback) => {
                     let tx = self.tx.clone();
 
                     self.rt.spawn(async move {
@@ -363,23 +363,10 @@ impl Application {
                                 let status = process.wait().await;
                                 let _ = tokio::join!(stdout_task, stderr_task);
 
-                                match status {
-                                    Ok(status) if status.success() => {
-                                        let _ = tx
-                                            .send(Command::Devent(
-                                                format!("Задача '{}' успешно выполнена", name),
-                                                Type::Success,
-                                            ))
-                                            .await;
-                                    }
-                                    _ => {
-                                        let _ = tx
-                                            .send(Command::Devent(
-                                                format!("Задача '{}' завершилась с ошибкой", name),
-                                                Type::Error,
-                                            ))
-                                            .await;
-                                    }
+                                if let Some(callback) = callback {
+                                    let _ = tx
+                                        .send(Command::LuaCallback(callback, status.is_ok()))
+                                        .await;
                                 }
                             }
                             Err(error) => {
@@ -393,17 +380,15 @@ impl Application {
                         }
                     });
                 }
-                Command::Copyng() => {
+                Command::Copyng(project) => {
                     let _ = self.tx.blocking_send(Command::Devent(
                         "Начало копирования...".into(),
                         Type::Message,
                     ));
 
                     let tx = self.tx.clone();
-                    let projects = self.data.read().projects.clone();
-
                     self.rt.spawn(async move {
-                        mvcore::task::copying(projects, tx).await;
+                        mvcore::task::copying(project, tx).await;
 
                         mvcore::service::show_notification(
                             "mvtool",
@@ -483,6 +468,9 @@ impl Application {
                 }
                 Command::TryUpdates() => {
                     self.try_update();
+                }
+                Command::LuaCallback(callback, status) => {
+                    callback(status);
                 }
             }
         }
@@ -697,7 +685,10 @@ impl ApplicationHandler for Application {
                     },
                 ..
             } => {
-                let _ = self.tx.blocking_send(Command::Copyng());
+                let projects = self.data.read().projects.clone();
+                if let Some(project) = projects.into_iter().find(|project| project.selected) {
+                    let _ = self.tx.blocking_send(Command::Copyng(project));
+                }
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if let winit::keyboard::PhysicalKey::Code(key_code) = event.physical_key {

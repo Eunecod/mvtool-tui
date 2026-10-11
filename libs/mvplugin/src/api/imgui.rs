@@ -31,7 +31,6 @@ pub fn imgui(ctx: &mut RegisterContext) -> Result<(), String> {
         .create_function(|_, item_name: String| unsafe {
             with_ui(|ui| {
                 let clicked = ui.menu_item(item_name);
-
                 Ok(clicked)
             })
         })
@@ -45,7 +44,7 @@ pub fn imgui(ctx: &mut RegisterContext) -> Result<(), String> {
                 Ok(())
             })
         })
-        .map_err(|error| format!("Ошибка загрузки [api: imgui_text]: {}", error))?;
+        .map_err(|error| format!("Ошибка загрузки [api: text]: {}", error))?;
 
     let button = ctx
         .lua
@@ -55,7 +54,18 @@ pub fn imgui(ctx: &mut RegisterContext) -> Result<(), String> {
                 Ok(clicked)
             })
         })
-        .map_err(|error| format!("Ошибка загрузки [api: imgui_button]: {}", error))?;
+        .map_err(|error| format!("Ошибка загрузки [api: button]: {}", error))?;
+
+    let input_text = ctx
+        .lua
+        .create_function(|_, (label, mut buffer): (String, String)| unsafe {
+            with_ui(|ui| {
+                ui.set_next_item_width(-1.0);
+                let changed = ui.input_text(label, &mut buffer).build();
+                Ok((changed, buffer))
+            })
+        })
+        .map_err(|error| format!("Ошибка загрузки [api: input_text]: {}", error))?;
 
     ctx.api
         .set("menu_item", menu_item)
@@ -67,6 +77,10 @@ pub fn imgui(ctx: &mut RegisterContext) -> Result<(), String> {
 
     ctx.api
         .set("button", button)
+        .map_err(|error| error.to_string())?;
+
+    ctx.api
+        .set("input_text", input_text)
         .map_err(|error| error.to_string())?;
 
     Ok(())
