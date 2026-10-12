@@ -150,7 +150,6 @@ impl Loader {
 
     fn is_support_version(target_version: &str) -> bool {
         mvcore::service::is_newer_version(target_version)
-            && mvcore::service::is_newer_version("2.10.0")
     }
 
     fn load_metadata(&self, file_content: &str) -> PluginMetadata {
